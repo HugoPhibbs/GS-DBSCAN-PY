@@ -173,12 +173,6 @@ def vec_minus_across_row(X, i, j, w):
 
     w[thread_idx] = X[i][thread_idx] - X[j][thread_idx] 
 
-u = np.array([[1, 2, 3],[4, 5, 6]])
-v = np.array([[7, 8, 9],[10, 11, 12]])
-
-print(euclidean_distance(u, v))
-
-
 
     
 
