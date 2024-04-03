@@ -1,6 +1,5 @@
 from numba import cuda
 import numpy as np
-import heapq
 import numba
 from limited_priority_queue import LimitedPriorityQueue
 import math
@@ -140,34 +139,120 @@ def random_vecs(num, dim):
     return np.random.normal(size=(num, dim))
 
 @cuda.jit
-def main_kernel(A, B, X, D, k, m, eps, start_row, start_col, n, d):
+def main_kernel(A, B, X, D, C, eps, start_row, start_col, num_random_vecs):
+    """
+    Main cuda kernel for the alpha algorithm
+
+    Yes this function has a lot of parameters, not much I can do about it :/. 
+
+    TODO Remove superfluous parameters that can be calculated from the others
+
+    Args:
+        A: A matrix as described in notes. Has shape (2*dataset_size, k)
+        B: B matrix as described in notes. Has shape (2*num_random_vecs, m)
+        C: C matrix as described in notes. Has shape (dataset_size, 2*k*m)
+        D: D vector as described in notes. Has (dataset_size,)
+        X: point dataset stored along the ROWS. Has shape (dataset_size, dataset_dim)
+        D: random vectors stored along the COLS. Has shape (random_vecs_dim, num_random_vecs)
+        eps: Cluster radius tolerance
+        start_row: The row that this grid starts at within A
+        start_col: The column that this grid starts at within A
+    """
     block_idx = cuda.blockIdx.x # Block index within the grid. Grid is flat to simplify things
     thread_idx = cuda.threadIdx.x # Thread index within the block. Block is flat to simplify things
 
-    row = start_row + block_idx
+    A_size = A.shape[0]
+    k = A.shape[1]
+    dataset_dim = X.shape[1]
 
-    if row >= n:
-        row %= n
-        col = start_col + 1
-    else:
-        col = start_col
+    A_row = start_row
+    A_col = start_col + block_idx
+
+    if A_col >= k:
+        q = A_col // k
+        A_row += q
+        A_col %= k
     
-    if col >= d:
+    if A_row >= A_size:
         return
     
-    q_minus_x = cuda.local.array(shape=(X.shape[0],), dtype=numba.float32) 
+    x_idx = B[A[A_row][A_col]][thread_idx]
+    q_idx = A_row // 2
 
-    vec_minus_across_row(X, row, B[col, thread_idx], q_minus_x)
-
+    # TODO idea. Use one kernel to calculate x_idx, q_idx
 
     
-    # q = X[row // 2] ̌# TODO, this is wrong, need to allocate array differently.
-    # x = X[B[col, thread_idx]]
+
+    distance = euclidean_dist_main_helper(X, dataset_dim, q_idx, x_idx=x_idx)
+
+    if distance < eps:
+        C[q_idx][D[q_idx]] = x_idx
+        D[q_idx] += 1
+
+def euclidean_dist_main_helper(X, dataset_dim, q_idx, x_idx):
+    """
+    Helper method to calculate the euclidean distance between two points in the dataset. Specialised to help the main kernel
+
+    Args:
+        X: The dataset
+        dataset_dim: The dimension of the dataset
+        q_idx: The index of the query vector in the dataset. I
+        x_idx: The index of the vector to be figured out if it is within eps range of the query vector
+
+    Returns:
+        The euclidean distance between the two points. 
+    """
+
+    q_minus_x = cuda.local.array(shape=(dataset_dim,), dtype=numba.float32) 
+
+    minus_across_mat_row(X, q_idx, x_idx, q_minus_x)
+
+    q_minus_x_squared = cuda.local.array(shape=(dataset_dim,), dtype=numba.float32)
+
+    square_vector[1,  ](q_minus_x, q_minus_x_squared)
+
+    summed = cuda.local.array(shape=(1,), dtype=numba.float32) # Need an array for atomic addition across threads.
+
+    sum_vector(q_minus_x_squared, summed)
+
+    summed_sqrt = math.sqrt(summed[0])
+
+    return summed_sqrt
 
 @cuda.jit
-def vec_minus_across_row(X, i, j, w):
+def sum_vector(vec, result):
+    """
+    Sums the entires of a vector
+    
+    Args:
+        vec: The vector to sum
+        result: The result of the sum
+    """
+    tid = cuda.threadIdx.x
+    cuda.atomic.add(result, 0, vec[tid])
+
+@cuda.jit
+def square_vector(vec, result):
+    """
+    Squares the entries of a vector. I.e. performs a dot product with itself
+
+    Args:
+        vec: The vector to square
+        result: The result of the squared vector
+    """
+    thread_idx = cuda.threadIdx.x
+    result[thread_idx] = vec[thread_idx] * vec[thread_idx]
+
+@cuda.jit
+def minus_across_mat_row(X, i, j, w):
     """
     Subtracts the ith row of X from the jth row of X
+
+    Args:
+        X: The matrix to subtract from
+        i: The row to subtract from
+        j: The row to subtract
+        w: The resulting vector
     """
     thread_idx = cuda.threadIdx.x
 
