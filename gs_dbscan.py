@@ -269,55 +269,102 @@ def euclidean_dist_main_helper(X, dataset_dim, q_idx, x_idx):
 
 
 @cuda.jit
-def process_i_j_vectors(X, i, j, ):
+def process_i_j_vectors(X, I, R, start_i):
     """
-    Combines minusing, squaring and summing in one kernel
+    Combines subtraction, squaring and summing steos in one kernel. 
 
-     TODO complete me!
+    Assumes that processing is done in batches (say 500 query vectors per grid at a time)
+
+    Idea is that you organise the grid with query vectors along x direction, and candidate vectors along the y direction. This way you can process the distances between the query and candidate vectors in parallel.
+
+    A single thread does the subtraction, squaring and summing for a single entry between a query and candidate vector, then adds it to the result matrix R.
+
+    Effectively finds the euclidean distance squared between two vectors in the dataset.
+
+    Args:
+        X: The dataset containing the vectors, stored along the ROWS
+        R: The matrix to store the result of the subtraction, squaring and summing. Has shape (batch_size, 2*k*m). Each entry should be atomic. And should be initialised with zero entries
+        start_i: Starting index of the q'ith vector to start at in the dataset
     Returns:
-
     """
-    pass
+    thread_idx = cuda.threadId.x # Entry within vectors to process
+    block_idx_x = cuda.blockIdx.x # Query vector index
+    block_idx_y = cuda.blockIdx.y # Candidate vector index
 
+    R_cols = R.shape[1]
+
+    i = start_i + block_idx_x
+    j = I[i][block_idx_y]
+
+    subtracted_entry = X[i][thread_idx] - X[j][thread_idx]
+    squared_entry = subtracted_entry ** 2
+    cuda.atomic.add(R, block_idx_x * R_cols + block_idx_y, squared_entry) # CUDA flattens array so we use this trick
 
 @cuda.jit
-def sum_vector(vec, result):
+def compare_distances_batch(R, C, E, start_i, eps_squared):
     """
-    Sums the entires of a vector
+    Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates a matrix of clusters if so
+
+    R contains the distances between the query and candidate vectors. The distances are squared. R is indexed with the query vectors along the rows and the candidate vectors along the columns. 
+    
+    The ith row of R, correseponds to the (i + start_i)'th query vector. The entry in the jth coluumn along the ith row of R contains the distance between the (i + start_i)'th query vector and the I[j]'ith dataset vector (this is out candidate vector)
+
+    Grid should be organised with one block containg k*m threads. Each thread should be responsible for a single candidate vector. The block should be responsible for half of the candidate vectors of a single query vector. This is done similarly to the I matrix. 
+    The first half of the block should be responsible for the closest candidate vectors to the query vector and the second half should be responsible for the furthest candidate vectors to the query vector. This is done to have the total thread count per block to be less than 1024 (assuming k*m <= 1024)
     
     Args:
-        vec: The vector to sum
-        result: The result of the sum
+        R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
+        C: The matrix containing cluster data. The ith row contains the cluster data for the (i + start_i) th query vector. The cluster data is stored in the form of the indices of the candidate vectors that are within epsilon range of the query vector. Has shape (dataset_size, 2*k*m). The indices of the neighbouring vectors are stored starting from the left
+        E: An array storing the indices of the end of the cluster data for each query vector. Has shape (dataset_size,). This is used to keep track of where the next neighbourhood index should be stored in the C matrix
+        start_i: The starting index of the query vectors
+        eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
     """
-    tid = cuda.threadIdx.x
-    cuda.atomic.add(result, 0, vec[tid])
+    thread_idx = cuda.threadId.x
+    block_idx = cuda.blockIdx.x
+
+    i = start_i + block_idx // 2
+
+    pass
 
 @cuda.jit
-def square_vector(vec, result):
+def compare_distances(C, E, R, I, eps_squared):
     """
-    Squares the entries of a vector. I.e. performs a dot product with itself
+    Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates a matrix of clusters if so
+
+    While the batch version uses a starting i index, this processes all query vectors at once, using a humungous amount of memory! (assuming a dataset size). The size of the grid is 2 * dataset_size, unlike a limiting batch size in the batch version. 
+
+    SEE compare_distances_batch detailed documentation
 
     Args:
-        vec: The vector to square
-        result: The result of the squared vector
+        R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
+        C: The matrix containing cluster data. The ith row contains the cluster data for the (i + start_i) th query vector. The cluster data is stored in the form of the indices of the candidate vectors that are within epsilon range of the query vector. Has shape (dataset_size, 2*k*m). The indices of the neighbouring vectors are stored starting from the left
+        E: An array storing the indices of the end of the cluster data for each query vector. Has shape (dataset_size,). This is used to keep track of where the next neighbourhood index should be stored in the C matrix
+        eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
     """
-    thread_idx = cuda.threadIdx.x
-    result[thread_idx] = vec[thread_idx] * vec[thread_idx]
+    thread_idx = cuda.threadId.x
+    block_idx = cuda.blockIdx.x
 
-@cuda.jit
-def minus_across_mat_row(X, i, j, w):
-    """
-    Subtracts the ith row of X from the jth row of X
+    i = block_idx // 2
+    j = thread_idx + R.shape[1] // 2
 
-    Args:
-        X: The matrix to subtract from
-        i: The row to subtract from
-        j: The row to subtract
-        w: The resulting vector
-    """
-    thread_idx = cuda.threadIdx.x
+    if not (block_idx & 1): # Check if even. True if even
+        # Closest candidate vectors
+        dist_squared = R[i][thread_idx]
 
-    w[thread_idx] = X[i][thread_idx] - X[j][thread_idx] 
+    else:
+        # Furthest candidate vectors
+        dist_squared = R[i][j]
+    
+    if dist_squared < eps_squared:
+        C[i][E[i]] = I[thread_idx]
+        E[i] += 1
+    
+
+
+
+
+
+
 
 
     
