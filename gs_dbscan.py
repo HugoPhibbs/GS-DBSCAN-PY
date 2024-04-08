@@ -324,7 +324,7 @@ def compare_distances_batch(R, C, E, start_i, eps_squared):
 
     i = start_i + block_idx // 2
 
-    pass
+    pass # TODO finish this, if batch processing is required
 
 @cuda.jit
 def compare_distances(C, E, R, I, eps_squared):
@@ -338,26 +338,28 @@ def compare_distances(C, E, R, I, eps_squared):
     Args:
         R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
         C: The matrix containing cluster data. The ith row contains the cluster data for the (i + start_i) th query vector. The cluster data is stored in the form of the indices of the candidate vectors that are within epsilon range of the query vector. Has shape (dataset_size, 2*k*m). The indices of the neighbouring vectors are stored starting from the left
-        E: An array storing the indices of the end of the cluster data for each query vector. Has shape (dataset_size,). This is used to keep track of where the next neighbourhood index should be stored in the C matrix
+        E: An array storing the indices of the end of the cluster data for each query vector. Has shape (dataset_size,). This is used to keep track of where the next neighbourhood index should be stored in the C matrix. Should be initialised with zeros, and atomic.
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
     """
     thread_idx = cuda.threadId.x
     block_idx = cuda.blockIdx.x
 
     i = block_idx // 2
-    j = thread_idx + R.shape[1] // 2
+    
 
     if not (block_idx & 1): # Check if even. True if even
         # Closest candidate vectors
         dist_squared = R[i][thread_idx]
+        j = thread_idx
 
     else:
         # Furthest candidate vectors
         dist_squared = R[i][j]
+        j = thread_idx + R.shape[1] // 2
     
     if dist_squared < eps_squared:
-        C[i][E[i]] = I[thread_idx]
-        E[i] += 1
+        C[i][E[i]] = I[i][j]
+        cuda.atomic(E, i, 1)
     
 
 
