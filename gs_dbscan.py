@@ -54,6 +54,56 @@ def gs_dbscan(X, D, minPts, k, m, eps):
 
     pass
 
+@cuda.jit
+def construct_I_matrix(I, A, B):
+    """
+    Constructs the I matrix. 
+
+    When using, set a grid size to be the twice the number of query vectors.
+
+    In essence the I matrix stores the vector indices for the comparisons between query and candidate vectors. The block size should be k*m. These both assume flat grids and blocks.
+
+    The idea of this kernel is that each block (with indices of the form 2*i+a) will closest vectors to closest random vectors if a is 0 and furthest vectors to furthest random vectors if a is 1.
+
+    Matrices A and B are passed in since they contain the indices of the top k closest and furthest points to the query and random vectors respectively. This can't exactly be done in this method
+
+    Args:
+        I: result matrix to store the pairs of (q_idx, x_idx). Has shape (dataset_size, 2*k*m)
+        X: point dataset
+        A: A matrix as described in notes. Has shape (2*dataset_size, k)
+        B: B matrix as described in notes. Has shape (2*num_random_vecs, m)    
+
+    """
+    thread_idx = cuda.threadIdx.x
+    block_idx = cuda.blockIdx.x
+    k = A.shape[1]
+    m = B.shape[1]
+
+    A_col = thread_idx // m
+    B_col = thread_idx % m
+    
+    q_idx = block_idx // 2
+
+    A_entry = A[block_idx][A_col]
+    B_entry = B[A_entry][B_col]
+
+    if not (block_idx & 1): # Use LSB to find if even, not modulo
+        # Store closest candidates to closest random vecs in the first half of I
+        I[q_idx][thread_idx] = B_entry
+    else:
+        # Store furthest candidates to furthest random vecs in the second half of I
+        I[q_idx][k*m + thread_idx] = B_entry
+
+def main_algorithm(I, X, batch_size=500):
+    """TODO"""
+    pass
+
+
+# TODO complete this
+# @cuda.jit
+# def construct_A_B_matrices(X, D, A, B, projections, k, m):
+#     pass
+
 def construct_A_B_matrices(X, D, k, m):
     """
     Constructs the A and B matrices for the dataset and random vectors
@@ -181,8 +231,6 @@ def main_kernel(A, B, X, D, C, eps, start_row, start_col, num_random_vecs):
 
     # TODO idea. Use one kernel to calculate x_idx, q_idx
 
-    
-
     distance = euclidean_dist_main_helper(X, dataset_dim, q_idx, x_idx=x_idx)
 
     if distance < eps:
@@ -218,6 +266,19 @@ def euclidean_dist_main_helper(X, dataset_dim, q_idx, x_idx):
     summed_sqrt = math.sqrt(summed[0])
 
     return summed_sqrt
+
+
+@cuda.jit
+def process_i_j_vectors(X, i, j, ):
+    """
+    Combines minusing, squaring and summing in one kernel
+
+     TODO complete me!
+    Returns:
+
+    """
+    pass
+
 
 @cuda.jit
 def sum_vector(vec, result):
