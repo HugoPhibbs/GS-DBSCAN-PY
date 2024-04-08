@@ -94,6 +94,10 @@ def construct_I_matrix(I, A, B):
         # Store furthest candidates to furthest random vecs in the second half of I
         I[q_idx][k*m + thread_idx] = B_entry
 
+def main_algorithm(I, X, batch_size=500):
+    """TODO"""
+    pass
+
 
 # TODO complete this
 # @cuda.jit
@@ -262,6 +266,19 @@ def euclidean_dist_main_helper(X, dataset_dim, q_idx, x_idx):
     summed_sqrt = math.sqrt(summed[0])
 
     return summed_sqrt
+
+
+@cuda.jit
+def process_i_j_vectors(X, i, j, ):
+    """
+    Combines minusing, squaring and summing in one kernel
+
+     TODO complete me!
+    Returns:
+
+    """
+    pass
+
 
 @cuda.jit
 def sum_vector(vec, result):
