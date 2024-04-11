@@ -98,11 +98,27 @@ def main_algorithm(I, X, batch_size=500):
     """TODO"""
     pass
 
+@cuda.jit
+def construct_A_matrix():
+    """
+    Constructs the A matrix for the dataset
 
-# TODO complete this
-# @cuda.jit
-# def construct_A_B_matrices(X, D, A, B, projections, k, m):
-#     pass
+    A has a shape of 2*len(X) x k. Each even row (row index of 2*i) of A is the indices of the top k closest points to the ith point in X. Each odd row (row index of form 2*i) of A is the indices of the top k furthest points to the ith point in X.
+
+    Each block is responsible for a single query vector. The block size should be k. The grid size should be len(X)
+    """
+    pass # Not sure how to implement this yet, not until I figure out how to do a priority Queue on the GPU
+
+@cuda.jit
+def construct_B_matrix():
+    """
+    Constructs the B matrix for the random vectors
+
+    B has a shape of 2*len(D) x m. Each even row (row index of 2*j) of B is the indices of the top m closest points to the jth random vector in D. Each odd row (row index of form 2*j) of B is the indices of the top m furthest points to the jth random vector in D.
+
+    Each block is responsible for a single random vector. The block size should be m. The grid size should be len(D)
+    """
+    pass
 
 def construct_A_B_matrices(X, D, k, m):
     """
@@ -144,7 +160,7 @@ def top_closest_and_furthest_indices(vector, n):
 
     Args:
         vector: the vector as mentioned above
-        k: k as mentioned
+        k: k as mentioned   
 
     Returns:
         A tuple of two lists. The first list is the top k closest indices and the second list is the top m furthest indices
@@ -251,35 +267,37 @@ def compare_distances(C, E, R, I, eps_squared):
     """
     Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates a matrix of clusters if so
 
+    There should be a grid size of 2 * len(X), with two blocks per query vector. The block size should be k*m. This is because each block is responsible for a single query vector. The first block is responsible for the closest candidate vectors to the query vector and the second block is responsible for the furthest candidate vectors to the query vector. This is done to have the total thread count per block to be less than 1024 (assuming k*m <= 1024)
+    
     While the batch version uses a starting i index, this processes all query vectors at once, using a humungous amount of memory! (assuming a dataset size). The size of the grid is 2 * dataset_size, unlike a limiting batch size in the batch version. 
 
     SEE compare_distances_batch detailed documentation
 
     Args:
+        C: The matrix containing cluster data. The ith row contains the cluster data for the ith query vector. The cluster data is stored in the form of the indices of the candidate vectors that are within epsilon range of the query vector. Has shape (dataset_size, 2*k*m). The indices of the neighbouring vectors are stored starting from the left
+        E: An array storing the indices of the end of the cluster data for each query vector. Has shape (dataset_size,). This is used to keep track of where the next neighbourhood index should be stored in the C matrix. Should be initialised with zeros, and   .
         R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
-        C: The matrix containing cluster data. The ith row contains the cluster data for the (i + start_i) th query vector. The cluster data is stored in the form of the indices of the candidate vectors that are within epsilon range of the query vector. Has shape (dataset_size, 2*k*m). The indices of the neighbouring vectors are stored starting from the left
-        E: An array storing the indices of the end of the cluster data for each query vector. Has shape (dataset_size,). This is used to keep track of where the next neighbourhood index should be stored in the C matrix. Should be initialised with zeros, and atomic.
+        I: The matrix containing the indices of the candidate vectors. Has shape (dataset_size, 2*k*m). The indices of the candidate vectors are stored in the same order as the distances in R. This is used to find the indices of the candidate vectors that are within epsilon range of the query vectors. Col entries are the indices of the candidate vectors
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
     """
-    thread_idx = cuda.threadId.x
+    thread_idx = cuda.threadIdx.x
     block_idx = cuda.blockIdx.x
 
     i = block_idx // 2
-    
 
     if not (block_idx & 1): # Check if even. True if even
         # Closest candidate vectors
-        dist_squared = R[i][thread_idx]
         j = thread_idx
+        dist_squared = R[i][j]
 
     else:
         # Furthest candidate vectors
-        dist_squared = R[i][j]
         j = thread_idx + R.shape[1] // 2
-    
+        dist_squared = R[i][j]
+
     if dist_squared < eps_squared:
-        C[i][E[i]] = I[i][j]
-        cuda.atomic(E, i, 1)
+        C[i][E[i]] = I[i][j] # Problem here, get race conditions!, I've kinda thought things will happen iteratively, but this is all at once.
+        cuda.atomic.add(E, i, 1)
     
 
 
