@@ -52,10 +52,10 @@ class TestCompareDistances(unittest.TestCase):
         C = np.full((8, 6), -1)
         E = np.zeros((8,), dtype=np.int32)
         R = np.array([
-            [0, 1, 2, 3, 4, 5],
+            [0, 1, 2, 3, 4, 1],
             [5, 4, 3, 2, 1, 0],
-            [0, 0, 0, 0, 0, 0],
-            [2, 1, 0, 0, 2, 0],
+            [0, 0, 0, 0, 0, 1],
+            [2, 1, 1, 0, 2, 0],
             [0, 5, 0, 4, 2, 0],
             [0, 2, 0, 0, 0, 5],
             [0, 0, 3, 0, 3, 0],
@@ -72,7 +72,7 @@ class TestCompareDistances(unittest.TestCase):
             [0, 3, 0, 5, 0, 0]
         ])
 
-        eps_squared = 2
+       
 
         # Getting into the habit of memory copying manually is apparently faster see https://numba.pydata.org/numba-doc/0.13/CUDAJit.html
         C_d = cuda.to_device(C)
@@ -82,20 +82,23 @@ class TestCompareDistances(unittest.TestCase):
     
         n = 8
         k = 1
-        m = 2
+        m = 3
+        eps_squared = 2
 
         gsd.compare_distances[2*n, k*m](C_d, E_d, R_d, I_d, eps_squared)
 
         C = C_d.copy_to_host()
         E = E_d.copy_to_host()
     
+        # Gives list when copying back, but we want numpy array
+        C = np.array(C)
+        E = np.array(E)         
         print(C)
         print(E)
 
-        C.sort(axis=1) # Sort along the rows, so we can compare it to the expected result, Since parallelism is not strictly ordered
+        C_non_empty = np.sum(C != -1, axis=1)
+        self.assertTrue(np.all(C_non_empty == E))
 
-        expected = [
-            []
-        ]
-
-        pass # TODO
+        C_expected = np.full_like(C, -1)       
+        C_expected[R < eps_squared] = I[R < eps_squared]
+        self.assertTrue(np.all(C_expected == C))
