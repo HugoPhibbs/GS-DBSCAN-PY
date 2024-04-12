@@ -54,46 +54,6 @@ def gs_dbscan(X, D, minPts, k, m, eps):
 
     pass
 
-@cuda.jit
-def construct_I_matrix(I, A, B):
-    """
-    Constructs the I matrix. 
-
-    When using, set a grid size to be the twice the number of query vectors.
-
-    In essence the I matrix stores the vector indices for the comparisons between query and candidate vectors. The block size should be k*m. These both assume flat grids and blocks.
-
-    The idea of this kernel is that each block (with indices of the form 2*i+a) will closest vectors to closest random vectors if a is 0 and furthest vectors to furthest random vectors if a is 1.
-
-    Matrices A and B are passed in since they contain the indices of the top k closest and furthest points to the query and random vectors respectively. This can't exactly be done in this method
-
-    Args:
-        I: result matrix to store the pairs of (q_idx, x_idx). Has shape (dataset_size, 2*k*m)
-        X: point dataset
-        A: A matrix as described in notes. Has shape (2*dataset_size, k)
-        B: B matrix as described in notes. Has shape (2*num_random_vecs, m)    
-
-    """
-    thread_idx = cuda.threadIdx.x
-    block_idx = cuda.blockIdx.x
-    k = A.shape[1]
-    m = B.shape[1]
-
-    A_col = thread_idx // m
-    B_col = thread_idx % m
-    
-    q_idx = block_idx // 2
-
-    A_entry = A[block_idx][A_col]
-    B_entry = B[A_entry][B_col]
-
-    if not (block_idx & 1): # Use LSB to find if even, not modulo
-        # Store closest candidates to closest random vecs in the first half of I
-        I[q_idx][thread_idx] = B_entry
-    else:
-        # Store furthest candidates to furthest random vecs in the second half of I
-        I[q_idx][k*m + thread_idx] = B_entry
-
 def main_algorithm(I, X, batch_size=500):
     """TODO"""
     pass
@@ -213,6 +173,8 @@ def process_i_j_vectors(X, I, R, start_i):
 
     Idea is that you organise the grid with query vectors along x direction, and candidate vectors along the y direction. This way you can process the distances between the query and candidate vectors in parallel.
 
+    Each thread within a block handles a different entry of the query vectors to candidate vector. I.e the ith thread processes the ith entry of the query vector to the candidate vector.
+
     A single thread does the subtraction, squaring and summing for a single entry between a query and candidate vector, then adds it to the result matrix R.
 
     Effectively finds the euclidean distance squared between two vectors in the dataset.
@@ -220,7 +182,7 @@ def process_i_j_vectors(X, I, R, start_i):
     Args:
         X: The dataset containing the vectors, stored along the ROWS
         R: The matrix to store the result of the subtraction, squaring and summing. Has shape (batch_size, 2*k*m). Each entry should be atomic. And should be initialised with zero entries
-        start_i: Starting index of the q'ith vector to start at in the dataset
+        start_i: Starting index of the q'ith vector to start at in the dataset. This is added to allow for batching of this process, since it can't all be done at once
     Returns:
     """
     thread_idx = cuda.threadId.x # Entry within vectors to process
@@ -237,45 +199,17 @@ def process_i_j_vectors(X, I, R, start_i):
     cuda.atomic.add(R, block_idx_x * R_cols + block_idx_y, squared_entry) # CUDA flattens array so we use this trick
 
 @cuda.jit
-def compare_distances_batch(R, C, E, start_i, eps_squared):
-    """
-    Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates a matrix of clusters if so
-
-    R contains the distances between the query and candidate vectors. The distances are squared. R is indexed with the query vectors along the rows and the candidate vectors along the columns. 
-    
-    The ith row of R, correseponds to the (i + start_i)'th query vector. The entry in the jth coluumn along the ith row of R contains the distance between the (i + start_i)'th query vector and the I[j]'ith dataset vector (this is out candidate vector)
-
-    Grid should be organised with one block containg k*m threads. Each thread should be responsible for a single candidate vector. The block should be responsible for half of the candidate vectors of a single query vector. This is done similarly to the I matrix. 
-    The first half of the block should be responsible for the closest candidate vectors to the query vector and the second half should be responsible for the furthest candidate vectors to the query vector. This is done to have the total thread count per block to be less than 1024 (assuming k*m <= 1024)
-    
-    Args:
-        R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
-        C: The matrix containing cluster data. The ith row contains the cluster data for the (i + start_i) th query vector. The cluster data is stored in the form of the indices of the candidate vectors that are within epsilon range of the query vector. Has shape (dataset_size, 2*k*m). The indices of the neighbouring vectors are stored starting from the left
-        E: An array storing the indices of the end of the cluster data for each query vector. Has shape (dataset_size,). This is used to keep track of where the next neighbourhood index should be stored in the C matrix
-        start_i: The starting index of the query vectors
-        eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
-    """
-    thread_idx = cuda.threadId.x
-    block_idx = cuda.blockIdx.x
-
-    i = start_i + block_idx // 2
-
-    pass # TODO finish this, if batch processing is required
-
-@cuda.jit
 def compare_distances(C, E, R, I, eps_squared):
     """
-    Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates a matrix of clusters if so
+    Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates a adjacency matrix if so
 
     There should be a grid size of 2 * len(X), with two blocks per query vector. The block size should be k*m. This is because each block is responsible for a single query vector. The first block is responsible for the closest candidate vectors to the query vector and the second block is responsible for the furthest candidate vectors to the query vector. This is done to have the total thread count per block to be less than 1024 (assuming k*m <= 1024)
     
-    While the batch version uses a starting i index, this processes all query vectors at once, using a humungous amount of memory! (assuming a dataset size). The size of the grid is 2 * dataset_size, unlike a limiting batch size in the batch version. 
-
-    SEE compare_distances_batch detailed documentation
+    Yes this essentially does a mask operation that is inbuilt in NumPy - but we have total control here over block and grid sizes. Also we effectively count entries of this mask at the same time
 
     Args:
-        C: The matrix containing cluster data. The ith row contains the cluster data for the ith query vector. The cluster data is stored in the form of the indices of the candidate vectors that are within epsilon range of the query vector. Has shape (dataset_size, 2*k*m). The indices of the neighbouring vectors are stored starting from the left
-        E: An array storing the indices of the end of the cluster data for each query vector. Has shape (dataset_size,). This is used to keep track of where the next neighbourhood index should be stored in the C matrix. Should be initialised with zeros, and   .
+        C: Adjacency matrix storing the cluster data for each query vector. Has shape (len(X), 2*k*m). Should have default entries of -1. For non -1 entries on the ith row, the entry is the index of a vector that is with epsilon range of the ith query vector
+        E: Stores the number of neighbourhood vectors per candidate vector. Used to allow for easier processing of C in the later steps. Has shape (len(X), 1)
         R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
         I: The matrix containing the indices of the candidate vectors. Has shape (dataset_size, 2*k*m). The indices of the candidate vectors are stored in the same order as the distances in R. This is used to find the indices of the candidate vectors that are within epsilon range of the query vectors. Col entries are the indices of the candidate vectors
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
@@ -296,9 +230,82 @@ def compare_distances(C, E, R, I, eps_squared):
         dist_squared = R[i][j]
 
     if dist_squared < eps_squared:
-        C[i][E[i]] = I[i][j] # Problem here, get race conditions!, I've kinda thought things will happen iteratively, but this is all at once.
+        C[i][j] = I[i][j]
         cuda.atomic.add(E, i, 1)
-    
+
+@cuda.jit
+def construct_I_matrix(I, A, B):
+    """
+    Constructs the I matrix.
+
+    When using, set a grid size to be the twice the number of query vectors.
+
+    In essence the I matrix stores the vector indices for the comparisons between query and candidate vectors. The block size should be k*m. These both assume flat grids and blocks.
+
+    The idea of this kernel is that each block (with indices of the form 2*i+a) will closest vectors to closest random vectors if a is 0 and furthest vectors to furthest random vectors if a is 1.
+
+    Matrices A and B are passed in since they contain the indices of the top k closest and furthest points to the query and random vectors respectively. This can't exactly be done in this method
+
+    Args:
+        I: result matrix to store the pairs of (q_idx, x_idx). Has shape (dataset_size, 2*k*m)
+        X: point dataset
+        A: A matrix as described in notes. Has shape (2*dataset_size, k)
+        B: B matrix as described in notes. Has shape (2*num_random_vecs, m)
+
+    """
+    thread_idx = cuda.threadIdx.x
+    block_idx = cuda.blockIdx.x
+    k = A.shape[1]
+    m = B.shape[1]
+
+    A_col = thread_idx // m
+    B_col = thread_idx % m
+
+    q_idx = block_idx // 2
+
+    A_entry = A[block_idx][A_col]
+    B_entry = B[A_entry][B_col]
+
+    if not (block_idx & 1): # Use LSB to find if even, not modulo
+        # Store closest candidates to closest random vecs in the first half of I
+        I[q_idx][thread_idx] = B_entry
+    else:
+        # Store furthest candidates to furthest random vecs in the second half of I
+        I[q_idx][k*m + thread_idx] = B_entry
+
+
+def find_B_entry(A, B, thread_idx, block_idx):
+    """
+    Finds the entry from B to retrieve, given the current thread and block index
+
+    Assumes that there is a grid size (number of blocks) of 2*len(X) and a block size of k*m
+
+    Args:
+        A:
+        B:
+        thread_idx:
+        block_idx:
+
+    Returns:
+
+    """
+
+
+    # TODO integrate this process with everything else
+
+    thread_idx = cuda.threadIdx.x
+    block_idx = cuda.blockIdx.x
+    k = A.shape[1]
+    m = B.shape[1]
+
+    A_col = thread_idx // m
+    B_col = thread_idx % m
+
+    q_idx = block_idx // 2
+
+    A_entry = A[block_idx][A_col]
+    return B[A_entry][B_col]
+
 
 
 
