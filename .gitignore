@@ -2,4 +2,4 @@
 gs_venv
 __pycache__
 .vscode
-__ptx__cache__.db
+__ptx_cache__.db
