@@ -3,6 +3,7 @@ import numpy as np
 import numba
 from limited_priority_queue import LimitedPriorityQueue
 import math
+import ThrustRTC as trtc
 
 """
 Preprocessing step for s-dbscan. 
@@ -199,16 +200,13 @@ def process_i_j_vectors(X, I, R, start_i):
     cuda.atomic.add(R, block_idx_x * R_cols + block_idx_y, squared_entry) # CUDA flattens array so we use this trick
 
 @cuda.jit
-def compare_distances(C, E, R, I, eps_squared):
+def construct_query_vector_degree_array(E, R, I, eps_squared):
     """
-    Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates a adjacency matrix if so
+    Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates an array containing the degree (number of neighbouring cluster points) of each query vector
 
     There should be a grid size of 2 * len(X), with two blocks per query vector. The block size should be k*m. This is because each block is responsible for a single query vector. The first block is responsible for the closest candidate vectors to the query vector and the second block is responsible for the furthest candidate vectors to the query vector. This is done to have the total thread count per block to be less than 1024 (assuming k*m <= 1024)
-    
-    Yes this essentially does a mask operation that is inbuilt in NumPy - but we have total control here over block and grid sizes. Also we effectively count entries of this mask at the same time
 
     Args:
-        C: Adjacency matrix storing the cluster data for each query vector. Has shape (len(X), 2*k*m). Should have default entries of -1. For non -1 entries on the ith row, the entry is the index of a vector that is with epsilon range of the ith query vector
         E: Stores the number of neighbourhood vectors per candidate vector. Used to allow for easier processing of C in the later steps. Has shape (len(X), 1)
         R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
         I: The matrix containing the indices of the candidate vectors. Has shape (dataset_size, 2*k*m). The indices of the candidate vectors are stored in the same order as the distances in R. This is used to find the indices of the candidate vectors that are within epsilon range of the query vectors. Col entries are the indices of the candidate vectors
@@ -230,9 +228,50 @@ def compare_distances(C, E, R, I, eps_squared):
         dist_squared = R[i][j]
 
     if dist_squared < eps_squared:
-        C[i][j] = I[i][j]
         cuda.atomic.add(E, i, 1)
 
+def process_query_vector_degree_array(E):
+    """
+    Processes the query vector degree array into a form that can be used to create the cluster graph
+
+    Creates a new vector V which stores the cumulative sum of the degree array E. This is used to find the starting index of the neighbourhood vectors for each query vector when creating the cluster graph.
+
+    Inspired by step 2 of the G-DBSCAN algorithm. 
+
+    Uses the ThrustRTC library.
+
+    Args:
+        E: The degree array of the query vectors. Has shape (len(X), 1)
+    
+    Returns:
+        The processed E array. 
+    """
+    E_d = trtc.device_vector_from_list(E, "int32_t")
+    V_d = trtc.device_vector("int32_t", E.shape[0])
+    trtc.Exclusive_Scan(E_d, V_d)
+    return V_d.to_host()
+
+def assemble_adjacency_list(R_d, I_d, E, V, eps_squared, k, m, n):
+    G = np.full(shape=(E[-1] + V[-1],), fill_value=-1)
+    G_d = cuda.to_device(G)
+    V_d = cuda.to_device(V)
+
+    construct_adjacency_list_for_query_vector[len(E), 2*k*m](R_d, I_d, G_d, V_d, eps_squared)
+    
+    G = G_d.copy_to_host()
+
+@cuda.jit
+def construct_adjacency_list_for_query_vector(R, I, G, V, eps_squared):
+    thread_idx = cuda.threadIdx.x
+    block_idx = cuda.blockIdx.x
+    block_size = cuda.blockDim.x
+
+    i = block_idx * block_size + thread_idx
+    curr_index = V[i]
+    for j in range(I.shape[1]):
+        if R[i][j] < eps_squared:
+            G[curr_index] = j
+            curr_index += 1
 
 @cuda.jit
 def construct_I_matrix(I, A, B):
