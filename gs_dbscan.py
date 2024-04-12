@@ -233,6 +233,7 @@ def compare_distances(C, E, R, I, eps_squared):
         C[i][j] = I[i][j]
         cuda.atomic.add(E, i, 1)
 
+
 @cuda.jit
 def construct_I_matrix(I, A, B):
     """
@@ -272,7 +273,6 @@ def construct_I_matrix(I, A, B):
     else:
         # Store furthest candidates to furthest random vecs in the second half of I
         I[q_idx][k*m + thread_idx] = B_entry
-
 
 def find_B_entry(A, B, thread_idx, block_idx):
     """
