@@ -5,91 +5,38 @@ from limited_priority_queue import LimitedPriorityQueue
 import math
 import ThrustRTC as trtc
 
-"""
-Preprocessing step for s-dbscan. 
-
-Equiv to algo 3 from paper
-
-Args:
-    X: point dataset
-    D: random vectors
-    k: k param
-    m: m param
-"""
-def pre_processing(X, D, k, m):
-    pass
-
-"""
-Finding core points and their neighbourhoods
-
-Equiv to algo 4 from paper
-
-Args:
-    X: point dataset
-    D: random vectors
-    k: k param
-    m: m param
-    eps: cluster radius tolerance
-"""
-def core_points(X, D, k, m, eps):
-    pass
-
-
 def gs_dbscan(X, D, minPts, k, m, eps):
     """
-    Main algo for s-dbscan
+    Main algo for gs-dbscan
 
     Equiv to algo 1 from paper
 
     Args:
-        X: point dataset
-        D: random vectors
+        X: point dataset. Stored along the ROWS
+        D: random vectors. Stored along the COLS
         minPts: Minimum number of points for a point to be clasified as a core point
-        k: k param
-        m: m param
+        k: k param as per S-DBSCAN paper
+        m: m param as per S-DBSCAN paper
         eps: Cluster radius for identifying core points
     """
-    for q in X:
-        product = D * q
-        sorted_indices = product.arg
-
-    pass
-
-def main_algorithm(I, X, batch_size=500):
-    """TODO"""
-    pass
-
-@cuda.jit
-def construct_A_matrix():
-    """
-    Constructs the A matrix for the dataset
-
-    A has a shape of 2*len(X) x k. Each even row (row index of 2*i) of A is the indices of the top k closest points to the ith point in X. Each odd row (row index of form 2*i) of A is the indices of the top k furthest points to the ith point in X.
-
-    Each block is responsible for a single query vector. The block size should be k. The grid size should be len(X)
-    """
-    pass # Not sure how to implement this yet, not until I figure out how to do a priority Queue on the GPU
-
-@cuda.jit
-def construct_B_matrix():
-    """
-    Constructs the B matrix for the random vectors
-
-    B has a shape of 2*len(D) x m. Each even row (row index of 2*j) of B is the indices of the top m closest points to the jth random vector in D. Each odd row (row index of form 2*j) of B is the indices of the top m furthest points to the jth random vector in D.
-
-    Each block is responsible for a single random vector. The block size should be m. The grid size should be len(D)
-    """
+    # Basic Steps:
+    # 1. Preprocessing, Construct A, B matrices using GPU priority queue
+    # 2. Perform vector calculations to compute the distances between query vectors and their candidate vectors stored in A and B
+    # 3. Compare the distances to find the neighbourhood vectors of the query vectors. Form vectors E and V
+    # 4. Assemble the adjacency list using the neighbourhood vectors, creating adjacency list G
+    # 5. Use list G to perform a BFS and find the connected components
+    # 6. Return the connected components "DONE" - G.Ramsay
     pass
 
 def construct_A_B_matrices(X, D, k, m):
     """
     Constructs the A and B matrices for the dataset and random vectors
 
-    A has a shape of 2*len(X) x k. Each even row (row index of 2*i) of A is the indices of the top k closest points to the ith point in X. Each odd row (row index of form 2*i) of A is the indices of the top k furthest points to the ith point in X.
+    A has a shape of (len(X), 2 * k). The i'th row of A stores the indices of the 2*k closest and furthest random vectors to the i'th point in X. Closest in first k slots and furthest in the last k slots.
 
-    B has a shape of 2*len(D) x m. Each even row (row index of 2*j) of B is the indices of the top m closest points to the jth random vector in D. Each odd row (row index of form 2*j) of B is the indices of the top m furthest points (in X) to the jth random vector in D.
+    B has a shape of (len(D), 2 * m). The j'th row of B stores the indices of the 2*m closest and furthest points to the j'th random vector in D. Closest in first m slots and furthest in the last m slots.
 
-    Args:
+    Args: 
         X: point dataset A matrix of points stored along the ROWS
         D: random vectors A matrix of random vectors stored along the COLS
         k: k param k parameter as described above
@@ -98,20 +45,23 @@ def construct_A_B_matrices(X, D, k, m):
     Returns:
         A tuple of two matrices. The first matrix is the A matrix and the second matrix is the B matrix
     """
+
+    # TODO, do this on the GPU
+    
     product = dataset_random_projections(X, D)
 
-    A = np.zeros(size=(len(X)*2, k))
-    B = np.zeros(size=(len(D)*2, m))
+    A = np.zeros(size=(len(X), 2*k))
+    B = np.zeros(size=(len(D), 2*m))
 
     for j in range(len(A)):
         top_k, bottom_k = top_closest_and_furthest_indices(product[j], k)
-        A[2*j] = top_k
-        A[2*j+1] = bottom_k
+        A[2*j, :k] = top_k
+        A[2*j+1, k:] = bottom_k
 
     for j in range(len(B)):
         top_m, bottom_m = top_closest_and_furthest_indices(product[:, j], m)
-        B[2*j] = top_m
-        B[2*j+1] = bottom_m
+        B[2*j, :m] = top_m
+        B[2*j+1, m:] = bottom_m
 
     return A, B
 
@@ -166,7 +116,7 @@ def random_vecs(num, dim):
     return np.random.normal(size=(num, dim))
 
 @cuda.jit
-def process_i_j_vectors(X, I, R, start_i):
+def process_i_j_vectors(X, A, B, R, start_i):
     """
     Combines subtraction, squaring and summing steos in one kernel. 
 
@@ -193,14 +143,17 @@ def process_i_j_vectors(X, I, R, start_i):
     R_cols = R.shape[1]
 
     i = start_i + block_idx_x
-    j = I[i][block_idx_y]
+    A_col = block_idx_y // B.shape[1]
+    B_col = block_idx_y % B.shape[1]
+
+    j = B[A[i][A_col]][B_col] # NTS: Removes usage of I matrix
 
     subtracted_entry = X[i][thread_idx] - X[j][thread_idx]
     squared_entry = subtracted_entry ** 2
     cuda.atomic.add(R, block_idx_x * R_cols + block_idx_y, squared_entry) # CUDA flattens array so we use this trick
 
 @cuda.jit
-def construct_query_vector_degree_array(E, R, I, eps_squared):
+def construct_query_vector_degree_array(E, R, eps_squared):
     """
     Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates an array containing the degree (number of neighbouring cluster points) of each query vector
 
@@ -209,7 +162,6 @@ def construct_query_vector_degree_array(E, R, I, eps_squared):
     Args:
         E: Stores the number of neighbourhood vectors per candidate vector. Used to allow for easier processing of C in the later steps. Has shape (len(X), 1)
         R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
-        I: The matrix containing the indices of the candidate vectors. Has shape (dataset_size, 2*k*m). The indices of the candidate vectors are stored in the same order as the distances in R. This is used to find the indices of the candidate vectors that are within epsilon range of the query vectors. Col entries are the indices of the candidate vectors
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
     """
     thread_idx = cuda.threadIdx.x
@@ -236,7 +188,7 @@ def process_query_vector_degree_array(E):
 
     Creates a new vector V which stores the cumulative sum of the degree array E. This is used to find the starting index of the neighbourhood vectors for each query vector when creating the cluster graph.
 
-    Inspired by step 2 of the G-DBSCAN algorithm. 
+    Inspired by step 2 of the G-DBSCAN algorthm. 
 
     Uses the ThrustRTC library.
 
@@ -251,99 +203,68 @@ def process_query_vector_degree_array(E):
     trtc.Exclusive_Scan(E_d, V_d)
     return V_d.to_host()
 
-def assemble_adjacency_list(R_d, I_d, E, V, eps_squared, k, m, n):
+def assemble_adjacency_list(R_d, E, V, eps_squared, block_size=1024):
+    """
+    Assembles the adjacency list as per the G-DBSCAN algorithm
+
+    Some parameters are saved onto cuda device memory. Just to avoid copying them back to CPU memory for processing
+
+    Args:
+        R_d: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
+        E: The degree array of the query vectors. Has shape (len(X), 1)
+        V: The processed degree array of the query vectors. Has shape (len(X), 1)
+        eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
+        k: k as described above
+        m: m as described above
+        n: number of query vectors
+    
+    Returns:
+        An adjacency list as per the G-DBSCAN algorithm
+
+    """
     G = np.full(shape=(E[-1] + V[-1],), fill_value=-1)
     G_d = cuda.to_device(G)
     V_d = cuda.to_device(V)
 
-    construct_adjacency_list_for_query_vector[len(E), 2*k*m](R_d, I_d, G_d, V_d, eps_squared)
+    construct_adjacency_list_for_query_vector[len(E), block_size](R_d, G_d, V_d, eps_squared)
     
-    G = G_d.copy_to_host()
+    return G_d.copy_to_host()
+    
 
 @cuda.jit
-def construct_adjacency_list_for_query_vector(R, I, G, V, eps_squared):
+def construct_adjacency_list_for_query_vector(R, G, V, eps_squared):
+    """
+    Constructs a segment of the adjacency list for a single query vector
+
+    Thread is responsible for a single query vector. The block size should be the maximum - around 1024
+    
+    Modifies G in place
+    
+    Args:
+        R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
+        I: The matrix containing the indices of the candidate vectors. Has shape (dataset_size, 2*k*m). The indices of the candidate vectors are stored in the same order as the distances in R. This is used to find the indices of the candidate vectors that are within epsilon range of the query vectors. Col entries are the indices of the candidate vectors
+        G: The adjacency list to store the neighbourhood vectors of the query vectors. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
+        V: The processed degree array of the query vectors. Has shape (len(X), 1)
+        eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
+    """
     thread_idx = cuda.threadIdx.x
     block_idx = cuda.blockIdx.x
     block_size = cuda.blockDim.x
 
     i = block_idx * block_size + thread_idx
     curr_index = V[i]
-    for j in range(I.shape[1]):
+    for j in range(R.shape[1]):
         if R[i][j] < eps_squared:
             G[curr_index] = j
             curr_index += 1
 
-@cuda.jit
-def construct_I_matrix(I, A, B):
+def perform_BFS(G, V):
     """
-    Constructs the I matrix.
+    Performs a BFS on the adjacency list to find the connected components
 
-    When using, set a grid size to be the twice the number of query vectors.
-
-    In essence the I matrix stores the vector indices for the comparisons between query and candidate vectors. The block size should be k*m. These both assume flat grids and blocks.
-
-    The idea of this kernel is that each block (with indices of the form 2*i+a) will closest vectors to closest random vectors if a is 0 and furthest vectors to furthest random vectors if a is 1.
-
-    Matrices A and B are passed in since they contain the indices of the top k closest and furthest points to the query and random vectors respectively. This can't exactly be done in this method
-
-    Args:
-        I: result matrix to store the pairs of (q_idx, x_idx). Has shape (dataset_size, 2*k*m)
-        X: point dataset
-        A: A matrix as described in notes. Has shape (2*dataset_size, k)
-        B: B matrix as described in notes. Has shape (2*num_random_vecs, m)
-
+    As per the G-DBSCAN algorithm. Inspired by "Accelerating large graph algorithms on the GPU with CUDA" Hawish et al
     """
-    thread_idx = cuda.threadIdx.x
-    block_idx = cuda.blockIdx.x
-    k = A.shape[1]
-    m = B.shape[1]
-
-    A_col = thread_idx // m
-    B_col = thread_idx % m
-
-    q_idx = block_idx // 2
-
-    A_entry = A[block_idx][A_col]
-    B_entry = B[A_entry][B_col]
-
-    if not (block_idx & 1): # Use LSB to find if even, not modulo
-        # Store closest candidates to closest random vecs in the first half of I
-        I[q_idx][thread_idx] = B_entry
-    else:
-        # Store furthest candidates to furthest random vecs in the second half of I
-        I[q_idx][k*m + thread_idx] = B_entry
-
-def find_B_entry(A, B, thread_idx, block_idx):
-    """
-    Finds the entry from B to retrieve, given the current thread and block index
-
-    Assumes that there is a grid size (number of blocks) of 2*len(X) and a block size of k*m
-
-    Args:
-        A:
-        B:
-        thread_idx:
-        block_idx:
-
-    Returns:
-
-    """
-
-
-    # TODO integrate this process with everything else
-
-    thread_idx = cuda.threadIdx.x
-    block_idx = cuda.blockIdx.x
-    k = A.shape[1]
-    m = B.shape[1]
-
-    A_col = thread_idx // m
-    B_col = thread_idx % m
-
-    q_idx = block_idx // 2
-
-    A_entry = A[block_idx][A_col]
-    return B[A_entry][B_col]
+    pass # TODO Implement me!
 
 
 
