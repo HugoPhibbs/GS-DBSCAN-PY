@@ -28,6 +28,17 @@ def gs_dbscan(X, D, minPts, k, m, eps):
     # 6. Return the connected components "DONE" - G.Ramsay
     pass
 
+def random_projections(X):
+    """
+    Uses FHT to compute the random projections of the dataset
+
+    Args:
+        X: point dataset. Stored along the ROWS
+    """
+
+    # TODO Implement me!
+    pass
+
 def construct_A_B_matrices(X, D, k, m):
     """
     Constructs the A and B matrices for the dataset and random vectors
