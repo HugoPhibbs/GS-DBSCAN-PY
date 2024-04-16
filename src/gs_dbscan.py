@@ -5,7 +5,7 @@ from limited_priority_queue import LimitedPriorityQueue
 import math
 import ThrustRTC as trtc
 
-def gs_dbscan(X, d, minPts, k, m, eps):
+def gs_dbscan(X, D, minPts, k, m, eps):
     """
     Main algo for gs-dbscan
 
@@ -19,8 +19,9 @@ def gs_dbscan(X, d, minPts, k, m, eps):
         m: m param as per S-DBSCAN paper
         eps: Cluster radius for identifying core points
     """
+    prechecks(X, D, minPts, k, m, eps)
     
-
+    A, B, _ = preprocessing(X, D)
 
     # Basic Steps:
     # 1. Preprocessing, Construct A, B matrices using GPU priority queue
@@ -31,7 +32,24 @@ def gs_dbscan(X, d, minPts, k, m, eps):
     # 6. Return the connected components "DONE" - G.Ramsay
     pass
 
-def preprocessing(X, D):
+def prechecks(X, D, minPts, k, m, eps):
+    """
+    Prechecks for the GS-DBSCAN algorithm
+
+    Args:
+        X: point dataset. Stored along the ROWS
+        D: number of random vectors to generate for projections
+        minPts: Minimum number of points for a point to be clasified as a core point
+        k: k param as per S-DBSCAN paper
+        m: m param as per S-DBSCAN paper
+        eps: Cluster radius for identifying core points
+    """
+    assert X.shape[0] > 0, "Dataset is empty"
+    assert X.shape[1] > 0, "Dataset has no features"
+    assert D > 0, "Number of random vectors must be greater than 0"
+    assert D >= k, "Number of random vectors must be greater than or equal to k"
+
+def preprocessing(X, D, k, m):
     """
     Pre-processing steps for GS-DBSCAN
 
@@ -40,10 +58,10 @@ def preprocessing(X, D):
         D: random vectors. Stored along the COLS
 
     Returns:
-        A tuple of two matrices. The first matrix is the A matrix and the second matrix is the B matrix
+        A tuple of 3 matrices. The first matrix is the A matrix, the second matrix is the B matrix and the third is the Y matrix containing random vectors (along COLS)
     """
-    D = create_random_vec_mat(D, X.shape[1])
-    return construct_A_B_matrices(X, D, k, m)
+    Y = create_random_vec_mat(D, X.shape[1])
+    return construct_A_B_matrices(X, D, k, m), Y
 
 def create_random_vec_mat(D, d):
     """
@@ -73,7 +91,7 @@ def random_projections(X):
     # TODO Implement me!
     pass
 
-def construct_A_B_matrices(X, D, k, m):
+def construct_A_B_matrices(X, Y, k, m):
     """
     Constructs the A and B matrices for the dataset and random vectors
 
@@ -82,8 +100,8 @@ def construct_A_B_matrices(X, D, k, m):
     B has a shape of (len(D), 2 * m). The j'th row of B stores the indices of the 2*m closest and furthest points to the j'th random vector in D. Closest in first m slots and furthest in the last m slots.
 
     Args: 
-        X: point dataset A matrix of points stored along the ROWS
-        D: random vectors A matrix of random vectors stored along the COLS
+        X: point dataset, a matrix of points stored along the ROWS
+        Y: random vectors, a matrix of random vectors stored along the COLS
         k: k param k parameter as described above
         m: m param m parameter as described above
 
@@ -93,10 +111,10 @@ def construct_A_B_matrices(X, D, k, m):
 
     # TODO, do this on the GPU
     
-    product = dataset_random_projections(X, D)
+    product = dataset_random_projections(X, Y)
 
     A = np.zeros(size=(len(X), 2*k))
-    B = np.zeros(size=(len(D), 2*m))
+    B = np.zeros(size=(len(Y), 2*m))
 
     for j in range(len(A)):
         top_k, bottom_k = top_closest_and_furthest_indices(product[j], k)
@@ -160,8 +178,13 @@ def random_vecs(num, dim):
     """
     return np.random.normal(size=(num, dim))
 
+def calculate_distances(batch_size=500):
+    # TODO, does the batch calculations for the method below
+    pass
+
 @cuda.jit
 def process_i_j_vectors(X, A, B, R, start_i):
+    # TODO, rename this method!
     """
     Combines subtraction, squaring and summing steos in one kernel. 
 
