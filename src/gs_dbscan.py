@@ -231,10 +231,10 @@ def find_squared_distances_at_start_i(X_d, A_d, B_d, distances_d, start_i):
         X_d: The dataset containing the vectors, stored along the ROWS
         A_d: The matrix containing the indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
         B_d: The matrix containing the indices of the closest and furthest points to each random vector in D. Has shape (len(D), 2*m)
-        distances: The matrix to store the result of the subtraction, squaring and summing. Has shape (batch_size, 2*k*m). Each entry should be atomic. And should be initialised with zero entries
+        distances_d: The matrix to store the result of the subtraction, squaring and summing. Has shape (dataset_size, 2*k*m). Each entry should be atomic. And should be initialised with zero entries
         start_i: Starting index of the q'ith vector to start at in the dataset. This is added to allow for batching of this process, since it can't all be done at once
     """
-    thread_idx = cuda.threadId.x # Entry within vectors to process
+    thread_idx = cuda.threadIdx.x # Entry within vectors to process
     block_idx_x = cuda.blockIdx.x # Query vector index
     block_idx_y = cuda.blockIdx.y # Candidate vector index
 
@@ -320,7 +320,7 @@ def process_query_vector_degree_array(E):
 
     Inspired by step 2 of the G-DBSCAN algorthm. 
 
-    Uses the ThrustRTC library.
+    Uses the ThrustRTC library to perform an exclusive scan
 
     Args:
         E: The degree array of the query vectors. Has shape (len(X), 1)
@@ -349,7 +349,7 @@ def assemble_adjacency_list(distances_d, E, V_d, eps_squared, block_size=1024):
         n: number of query vectors
     
     Returns:
-        An adjacency list as per the G-DBSCAN algorithm
+        An adjacency list as per the G-DBSCAN algorithm. Stored on CPU memory. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
 
     """
     dataset_size = len(E)
@@ -365,16 +365,17 @@ def assemble_adjacency_list(distances_d, E, V_d, eps_squared, block_size=1024):
 
 @cuda.jit
 def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, eps_squared):
+
+    #TODO add A and B to above signature
     """
     Constructs a segment of the adjacency list for a single query vector
 
-    Thread is responsible for a single query vector. The block size should be the maximum - around 1024
+    Thread is responsible for a single query vector. The block size should be the maximum - around 1024. Assumes that a query vector doesn't have more than 1024 vectors in its epsilon neighbourhood.
     
     Modifies G in place
     
     Args:
-        R: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
-        I: The matrix containing the indices of the candidate vectors. Has shape (dataset_size, 2*k*m). The indices of the candidate vectors are stored in the same order as the distances in R. This is used to find the indices of the candidate vectors that are within epsilon range of the query vectors. Col entries are the indices of the candidate vectors
+        distances_d: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
         G: The adjacency list to store the neighbourhood vectors of the query vectors. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
         V: The processed degree array of the query vectors. Has shape (len(X), 1)
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
@@ -387,7 +388,7 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
     curr_index = V_d[i]
     for j in range(distances_d.shape[1]):
         if distances_d[i][j] < eps_squared:
-            adjacency_list_d[curr_index] = j
+            adjacency_list_d[curr_index] = j #T
             curr_index += 1
 
 ### Performing BFS to find connected components ###
