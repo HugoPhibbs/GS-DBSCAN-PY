@@ -3,66 +3,126 @@ import unittest
 import numpy as np
 from numba import cuda
 import deepcomparer as dc
+import ThrustRTC as trtc
 
 class TestConstructingABMatrices(unittest.TestCase):
 
     def test_normally(self):
         pass # TODO
 
-
-class TestCompareDistances(unittest.TestCase):
+class TestSquareDistances(unittest.TestCase):
 
     def test_normally(self):
-        C = np.full((8, 6), -1)
-        E = np.zeros((8,), dtype=np.int32)
-        R = np.array([
-            [0, 1, 2, 3, 4, 1],
-            [5, 4, 3, 2, 1, 0],
-            [0, 0, 0, 0, 0, 1],
-            [2, 1, 1, 0, 2, 0],
-            [0, 5, 0, 4, 2, 0],
-            [0, 2, 0, 0, 0, 5],
-            [0, 0, 3, 0, 3, 0],
-            [0, 3, 0, 5, 0, 0]
-        ])
-        I = np.array([
-            [0, 1, 2, 3, 4, 5],
-            [7, 5, 6, 4, 3, 2],
-            [0, 0, 0, 1, 0, 0],
-            [2, 1, 1, 0, 2, 0],
-            [0, 5, 0, 4, 2, 8],
-            [0, 2, 0, 0, 0, 5],
-            [6, 0, 3, 0, 3, 0],
-            [0, 3, 0, 5, 0, 0]
-        ])
+        # Test the kernel function only
 
+        #TODO run me!
+
+        num_query_vecs = 4 # Substitute for batch testing, for testing purposes only 
+        num_ref_vecs = 4 # Set k = 1, m = 2
+        dim_query_vec = 3
+
+        distances = np.zeros(shape=(num_query_vecs, num_ref_vecs), dtype=np.float32)
+        distances_d = cuda.to_device(distances)
+
+        X = np.array([
+            [0, 1, 3],
+            [1, 2, 0],
+            [2, 0, 3],
+            [3, 0, 1],
+            [0, 0, 1]
+        ])
        
 
-        # Getting into the habit of memory copying manually is apparently faster see https://numba.pydata.org/numba-doc/0.13/CUDAJit.html
-        C_d = cuda.to_device(C)
+        A = np.array([
+            [0, 1],
+            [1, 2],
+            [2, 0],
+            [0, 3],
+            [1, 0]
+        ])
+
+        B = np.array([
+            [1, 2, 3, 0],
+            [0, 0, 1, 1],
+            [3, 0, 1, 1],
+            [1, 0, 0, 0],
+            [0, 0, 1, 1]
+        ])
+
+        X_d = cuda.to_device(X)
+        A_d  = cuda.to_device(A)
+        B_d = cuda.to_device(B)
+
+        start_i = 0 # TODO test with different start_i values
+
+        gsd.square_distances[(num_query_vecs, num_ref_vecs), dim_query_vec](X_d, A_d, B_d, distances_d, start_i)
+
+        distances = distances_d.copy_to_host()
+
+        print(distances) #TODO add expected
+
+class TestContructQueryVectorDegreeArray(unittest.TestCase):
+
+    def test_normally(self):
+        distances = np.array([
+            [0, 1, 2, 3],
+            [0, 2, 1, 0],
+            [1, 8, 9, 11],
+            [15, 2, 6, 7]
+        ])
+
+        E = np.zeros(shape = (4, ))
+
+        distances_d = cuda.to_device(distances)
         E_d = cuda.to_device(E)
-        R_d = cuda.to_device(R)
-        I_d = cuda.to_device(I)
-    
-        n = 8
-        k = 1
-        m = 3
-        eps_squared = 2
 
-        gsd.compare_distances[2*n, k*m](C_d, E_d, R_d, I_d, eps_squared)
+        eps_squared = 2.1
 
-        C = C_d.copy_to_host()
+        gsd.construct_query_vector_degree_array[8, 2](distances_d, E_d, eps_squared)
+
         E = E_d.copy_to_host()
-    
-        # Gives list when copying back, but we want numpy array
-        C = np.array(C)
-        E = np.array(E)         
-        print(C)
-        print(E)
+        
+        expected = [3, 4, 1, 1]
 
-        C_non_empty = np.sum(C != -1, axis=1)
-        self.assertTrue(np.all(C_non_empty == E))
+        self.assertTrue(dc.deep_compare(E, expected))
 
-        C_expected = np.full_like(C, -1)       
-        C_expected[R < eps_squared] = I[R < eps_squared]
-        self.assertTrue(np.all(C_expected == C))
+class TestProcessQueryVectorDegreeArray(unittest.TestCase):
+
+    def test_normally(self):
+
+        E = [3, 4, 1, 1]
+        V_expected = np.array([0, 3, 7, 8])
+        V_d = gsd.process_query_vector_degree_array(E)
+
+        V = trtc.device_vector_to_host(V_d)
+
+        self.assertTrue(dc.deep_compare(V, V_expected))
+
+
+class TestAssembleAdjacencyList(unittest.TestCase):
+
+    def test_normally(self):
+        V = np.array([0, 3, 7, 8])
+        E = [3, 4, 1, 1]
+
+        distances = np.array([
+            [0, 1, 2, 3],
+            [0, 2, 1, 0],
+            [1, 8, 9, 11],
+            [15, 2, 6, 7]
+        ])
+
+        adj_list = gsd.assemble_adjacency_list(V, E, distances)
+
+        expected = []
+
+        self.assertTrue(dc.deep_compare(adj_list, expected))
+
+
+class TestContructClusterGraph(unittest.TestCase):
+
+    pass # TODO
+
+class TestPerformBFS(unittest.TestCase):
+
+    pass # TODO
