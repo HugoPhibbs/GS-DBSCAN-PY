@@ -1,7 +1,8 @@
 from numba import cuda
 import numpy as np
-from limited_priority_queue import LimitedPriorityQueue
+from src.limited_priority_queue import LimitedPriorityQueue
 import ThrustRTC as trtc
+import cupy as cp
 
 def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     """
@@ -211,6 +212,28 @@ def find_squared_distances(X, A, B, batch_size = 500):
     
     return distances_d
 
+def find_squared_distances_cupy(X, A, B):
+    """
+    Alternatative implementation of the above method using CuPy
+
+    I'm curious to see if this is faster than the Numba CUDA implementation
+
+    Args:
+        X: dataset of vectors stored along the ROWS
+        A: matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
+        B: matrix of indices of the closest and furthest points to each random vector in D. Has shape (len(D), 2*m)
+
+    Returns:
+        A matrix of squared distances between the query and candidate vectors. Has shape (len(X), 2*k*m)
+    """
+    Z = X[B[A]]
+
+    Z  = Z.reshape(X.shape[0], Z.shape[1] * Z.shape[2], Z.shape[3])
+
+    Y = Z - X[:, np.newaxis, :]
+
+    return cp.sum(Y**2, axis=2)
+
 
 @cuda.jit
 def find_squared_distances_at_start_i(X_d, A_d, B_d, distances_d, start_i):
@@ -248,7 +271,7 @@ def find_squared_distances_at_start_i(X_d, A_d, B_d, distances_d, start_i):
 
     subtracted_entry = X_d[i][thread_idx] - X_d[j][thread_idx]
     squared_entry = subtracted_entry ** 2
-    cuda.atomic.add(distances_d, block_idx_x * distance_cols + block_idx_y, squared_entry) # CUDA flattens array so we use this trick
+    cuda.atomic.add(distances_d, (i, block_idx_x * distance_cols + block_idx_y), squared_entry) # CUDA flattens array so we use this trick
 
 ### Constructing the cluster graph ###
 
@@ -365,7 +388,6 @@ def assemble_adjacency_list(distances_d, E, V_d, eps_squared, block_size=1024):
 
 @cuda.jit
 def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, eps_squared):
-
     #TODO add A and B to above signature
     """
     Constructs a segment of the adjacency list for a single query vector

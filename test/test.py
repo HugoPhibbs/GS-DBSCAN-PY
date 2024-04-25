@@ -1,9 +1,11 @@
-import gs_dbscan as gsd
+import src.gs_dbscan as gsd
 import unittest
 import numpy as np
 from numba import cuda
 import deepcomparer as dc
 import ThrustRTC as trtc
+from timeit import default_timer as timer
+import cupy as cp
 
 class TestConstructingABMatrices(unittest.TestCase):
 
@@ -13,17 +15,6 @@ class TestConstructingABMatrices(unittest.TestCase):
 class TestSquareDistances(unittest.TestCase):
 
     def test_normally(self):
-        # Test the kernel function only
-
-        #TODO run me!
-
-        num_query_vecs = 4 # Substitute for batch testing, for testing purposes only 
-        num_ref_vecs = 4 # Set k = 1, m = 2
-        dim_query_vec = 3
-
-        distances = np.zeros(shape=(num_query_vecs, num_ref_vecs), dtype=np.float32)
-        distances_d = cuda.to_device(distances)
-
         X = np.array([
             [0, 1, 3],
             [1, 2, 0],
@@ -42,24 +33,31 @@ class TestSquareDistances(unittest.TestCase):
         ])
 
         B = np.array([
-            [1, 2, 3, 0],
-            [0, 0, 1, 1],
-            [3, 0, 1, 1],
-            [1, 0, 0, 0],
-            [0, 0, 1, 1]
+            [1, 2],
+            [0, 4],
+            [3, 1],
+            [1, 0],
+            [0, 2]
         ])
 
-        X_d = cuda.to_device(X)
-        A_d  = cuda.to_device(A)
-        B_d = cuda.to_device(B)
+        start = timer()
+        distances_cp = gsd.find_squared_distances_cupy(X, A, B)
 
-        start_i = 0 # TODO test with different start_i values
+        print(f"Cupy took {timer() - start} seconds")
 
-        gsd.square_distances[(num_query_vecs, num_ref_vecs), dim_query_vec](X_d, A_d, B_d, distances_d, start_i)
+    def test_normally_large_mats(self):
+        X = cp.random.uniform(size=(10000, 50))
+        A = cp.random.randint(size=(10000, 20), low=0, high=50-1)
+        B = cp.random.randint(size=(50, 50), low=0, high=X.shape[0] - 1)
 
-        distances = distances_d.copy_to_host()
+        start = timer()
 
-        print(distances) #TODO add expected
+        gsd.find_squared_distances_cupy(X, A, B)
+
+        print(f"Cupy took {timer() - start} seconds")
+
+
+
 
 class TestContructQueryVectorDegreeArray(unittest.TestCase):
 
