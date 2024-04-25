@@ -4,3 +4,4 @@ __pycache__
 .vscode
 __ptx_cache__.db
 mnist_dataset.csv
+.env
