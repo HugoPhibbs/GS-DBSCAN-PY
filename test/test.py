@@ -57,8 +57,6 @@ class TestSquareDistances(unittest.TestCase):
         print(f"Cupy took {timer() - start} seconds")
 
 
-
-
 class TestContructQueryVectorDegreeArray(unittest.TestCase):
 
     def test_normally(self):
@@ -68,19 +66,11 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
             [1, 8, 9, 11],
             [15, 2, 6, 7]
         ])
-
-        E = np.zeros(shape = (4, ))
-
-        distances_d = cuda.to_device(distances)
-        E_d = cuda.to_device(E)
-
         eps_squared = 2.1
 
-        gsd.construct_query_vector_degree_array[8, 2](distances_d, E_d, eps_squared)
+        E = gsd.construct_query_vector_degree_array(distances, eps_squared)
 
-        E = E_d.copy_to_host()
-        
-        expected = [3, 4, 1, 1]
+        expected = np.array([3, 4, 1, 1])
 
         self.assertTrue(dc.deep_compare(E, expected))
 
@@ -88,11 +78,9 @@ class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
     def test_normally(self):
 
-        E = [3, 4, 1, 1]
-        V_expected = np.array([0, 3, 7, 8])
-        V_d = gsd.process_query_vector_degree_array(E)
-
-        V = trtc.device_vector_to_host(V_d)
+        E = cp.array([3, 4, 1, 1], dtype=cp.int32)
+        V_expected = cp.array([0, 3, 7, 8])
+        V = gsd.process_query_vector_degree_array(E)
 
         self.assertTrue(dc.deep_compare(V, V_expected))
 

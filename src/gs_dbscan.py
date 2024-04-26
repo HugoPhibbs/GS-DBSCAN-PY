@@ -23,9 +23,9 @@ def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     
     A, B = preprocessing(X, D)
 
-    distances_d = find_squared_distances(X, A, B)
+    distances = find_squared_distances(X, A, B)
 
-    graph_adjacency_list = construct_cluster_graph(len(X), distances_d, eps, k, m)
+    graph_adjacency_list = construct_cluster_graph(distances, eps, k, m)
 
     connected_components = perform_BFS(graph_adjacency_list)
 
@@ -181,42 +181,13 @@ def random_vecs(num, dim):
 
 ### Calculating distances between query and candidate vectors ###
 
-def find_squared_distances(X, A, B, batch_size = 500):
+def find_squared_distances(X, A, B):
     """
-    Handles finding the squared distances between each of the query vectors and their candidate neighbourhood vectors
-
-    Args:
-        X dataset of vectors stored along the ROWS
-        A matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
-        B matrix of indices of the closest and furthest points to each random vector in D. Has shape (len(D), 2*m)
-        batch_size: The number of query vectors to process at a time. This is to avoid running out of memory on the GPU. Defaults to 500
-    
-    Returns:
-        A matrix of squared distances between the query and candidate vectors. Has shape (len(X), 2*k*m). IMPORTANT This is a reference to the matrix stored on GPU memory (i.e. a cuda device array)
-    """
-    dataset_size = len(X)
-    k = A.shape[1] // 2
-    m = B.shape[1] // 2
-
-    distances = np.array(shape=(dataset_size, 2*k*m))
-    
-    X_d = cuda.to_device(X)
-    A_d = cuda.to_device(A)
-    B_d = cuda.to_device(B)
-    distances_d = cuda.to_device(distances)
-
-    dataset_dim = X.shape[1] 
-
-    for i in range(0, dataset_size, batch_size):
-        find_squared_distances_at_start_i[batch_size, dataset_dim](X_d, A_d, B_d, distances_d, i)
-    
-    return distances_d
-
-def find_squared_distances_cupy(X, A, B):
-    """
-    Alternatative implementation of the above method using CuPy
+    Finds the squared distances between each query vector and their candidate vectors
 
     I'm curious to see if this is faster than the Numba CUDA implementation
+    
+    # TODO add batch processing for X with large dimensions
 
     Args:
         X: dataset of vectors stored along the ROWS
@@ -235,52 +206,13 @@ def find_squared_distances_cupy(X, A, B):
     return cp.sum(Y**2, axis=2)
 
 
-@cuda.jit
-def find_squared_distances_at_start_i(X_d, A_d, B_d, distances_d, start_i):
-    """
-    Combines subtraction, squaring and summing steos in one kernel. 
-
-    Assumes that processing is done in batches (say 500 query vectors per grid at a time)
-
-    Idea is that you organise the grid with query vectors along x direction, and candidate vectors along the y direction. This way you can process the distances between the query and candidate vectors in parallel.
-
-    Each thread within a block handles a different entry of the query vectors to candidate vector. I.e the ith thread processes the ith entry of the query vector to the candidate vector.
-
-    A single thread does the subtraction, squaring and summing for a single entry between a query and candidate vector, then adds it to the result matrix R.
-
-    Effectively finds the euclidean distance squared between two vectors in the dataset.
-
-    Args:
-        X_d: The dataset containing the vectors, stored along the ROWS
-        A_d: The matrix containing the indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
-        B_d: The matrix containing the indices of the closest and furthest points to each random vector in D. Has shape (len(D), 2*m)
-        distances_d: The matrix to store the result of the subtraction, squaring and summing. Has shape (dataset_size, 2*k*m). Each entry should be atomic. And should be initialised with zero entries
-        start_i: Starting index of the q'ith vector to start at in the dataset. This is added to allow for batching of this process, since it can't all be done at once
-    """
-    thread_idx = cuda.threadIdx.x # Entry within vectors to process
-    block_idx_x = cuda.blockIdx.x # Query vector index
-    block_idx_y = cuda.blockIdx.y # Candidate vector index
-
-    distance_cols = distances_d.shape[1]
-
-    i = start_i + block_idx_x
-    A_col = block_idx_y // B_d.shape[1]
-    B_col = block_idx_y % B_d.shape[1]
-
-    j = B_d[A_d[i][A_col]][B_col] # NTS: Removes usage of I matrix
-
-    subtracted_entry = X_d[i][thread_idx] - X_d[j][thread_idx]
-    squared_entry = subtracted_entry ** 2
-    cuda.atomic.add(distances_d, (i, block_idx_x * distance_cols + block_idx_y), squared_entry) # CUDA flattens array so we use this trick
-
 ### Constructing the cluster graph ###
 
-def construct_cluster_graph(dataset_size, distances_d, eps, k, m):
+def construct_cluster_graph(distances, eps, k, m):
     """
     Constructs the cluster graph as per the G-DBSCAN algorithm
 
     Args:
-        dataset_size: The number of vectors in the dataset
         distances: The matrix containing the squared distances between the query and candidate vectors. Stored on GPU memory via CUDA
         eps: The epsilon value. Used to determine if the candidate vectors are within epsilon range of the query vectors
         k: k as described above
@@ -289,52 +221,34 @@ def construct_cluster_graph(dataset_size, distances_d, eps, k, m):
 
     Returns:
         The adjacency list as per the G-DBSCAN algorithm
+        And the processed degree array of the query vectors. Stored on GPU memory (within the thrust library)
     """
     eps_squared = eps ** 2
 
-    E = np.zeros(shape=(dataset_size, 1))
-    E_d = cuda.to_device(E)
+    E = construct_query_vector_degree_array(distances, eps_squared)
 
-    construct_query_vector_degree_array[2*dataset_size, k*m](E_d, distances_d, eps_squared)
+    V = process_query_vector_degree_array(E) 
 
-    E = E_d.copy_to_host()
+    adjacency_list = assemble_adjacency_list(distances, E, V, eps_squared)
 
-    V_trtc = process_query_vector_degree_array(E) # Stored with ThrustRTC
+    return adjacency_list, V
 
-    adjacency_list = assemble_adjacency_list(distances_d, E, V_trtc, eps_squared)
-
-    return adjacency_list, V_trtc
-
-@cuda.jit
-def construct_query_vector_degree_array(E_d, distances_d, eps_squared):
+def construct_query_vector_degree_array(distances, eps_squared):
     """
-    Compares the distances between query vectors and candidate vectors to see if they are within epsilon range. Updates an array containing the degree (number of neighbouring cluster points) of each query vector
+    Finds the degree of the query vectors as per the G-DBSCAN algorithm.
 
-    There should be a grid size of 2 * len(X), with two blocks per query vector. The block size should be k*m. This is because each block is responsible for a single query vector. The first block is responsible for the closest candidate vectors to the query vector and the second block is responsible for the furthest candidate vectors to the query vector. This is done to have the total thread count per block to be less than 1024 (assuming k*m <= 1024)
+    This is used in later steps for the construction of the cluster graph
 
     Args:
-        E_d: Stores the number of neighbourhood vectors per candidate vector. Used to allow for easier processing of C in the later steps. Has shape (len(X), 1)
-        distances_d: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
+        distances: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
-    """
-    thread_idx = cuda.threadIdx.x
-    block_idx = cuda.blockIdx.x
-
-    i = block_idx // 2
-
-    if not (block_idx & 1): # Check if even. True if even
-        # Closest candidate vectors
-        j = thread_idx
-        dist_squared = distances_d[i][j]
-
-    else:
-        # Furthest candidate vectors
-        j = thread_idx + distances_d.shape[1] // 2
-        dist_squared = distances_d[i][j]
-
-    if dist_squared < eps_squared:
-        cuda.atomic.add(E_d, i, 1)
-
+    
+    Returns:
+        The degree array of the query vectors. Has shape (len(X), 1)
+    """ 
+    indices_mask = distances < eps_squared
+    return cp.sum(indices_mask, axis=1)
+    
 def process_query_vector_degree_array(E):
     """
     Processes the query vector degree array into a form that can be used to create the cluster graph
@@ -346,26 +260,28 @@ def process_query_vector_degree_array(E):
     Uses the ThrustRTC library to perform an exclusive scan
 
     Args:
-        E: The degree array of the query vectors. Has shape (len(X), 1)
+        E: A CuPy Array. The degree array of the query vectors. Has shape (len(X), 1)
     
     Returns:
-        The processed E array. Stored on GPU memory
+        The processed E array. As a cupy array
     """
-    E_d = trtc.device_vector_from_list(E, "int32_t") # These operations are expensive to copy back and forth. In C++ implementation could use ThrustRTC for all kernel implementations to avoid having to copy back and forth.
-    V_d = trtc.device_vector("int32_t", E.shape[0])
-    trtc.Exclusive_Scan(E_d, V_d)
-    return V_d
+    return cp.cumsum(E) - E # Effectively does an exclusive scan, very fast anwyays, probably not worth the effort to use ThrustRTC
 
-def assemble_adjacency_list(distances_d, E, V_d, eps_squared, block_size=1024):
+    #E_d = trtc.DVCupyVector(E)
+    #V_d = trtc.DVCupyVector(cp.zeros(len(E), dtype=cp.int32))
+    #trtc.Exclusive_Scan(E_d, V_d)
+    #return cp.array(V_d.to_host())
+
+def assemble_adjacency_list(distances, E, V, eps_squared, block_size=1024):
     """
     Assembles the adjacency list as per the G-DBSCAN algorithm
 
     Some parameters are saved onto cuda device memory. Just to avoid copying them back to CPU memory for processing
 
     Args:
-        distances_d: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Stored in GPU memory
-        E: The degree array of the query vectors. Has shape (len(X), 1)
-        V: The processed degree array of the query vectors (as per the G-DBSCAN algorithm). Has shape (len(X), 1). Stored in GPU memory with the ThrustRTC library
+        distances: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
+        E: CuPy array. The degree array of the query vectors. Has shape (len(X), 1)
+        V: CuPy array. The processed degree array of the query vectors (as per the G-DBSCAN algorithm). Has shape (len(X), 1)
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
         k: k as described above
         m: m as described above
@@ -375,11 +291,12 @@ def assemble_adjacency_list(distances_d, E, V_d, eps_squared, block_size=1024):
         An adjacency list as per the G-DBSCAN algorithm. Stored on CPU memory. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
 
     """
-    dataset_size = len(E)
-    last_V_entry = V_d.to_host(begin=dataset_size-1, end=dataset_size)[0]
 
-    adjacency_list = np.full(shape=(E[-1] + last_V_entry,), fill_value=-1)
+    adjacency_list = np.full(shape=(E[-1] + V[-1],), fill_value=-1)
     adjacency_list_d = cuda.to_device(adjacency_list)
+    distances_d = cp.asarray(distances)
+
+    V_d = cuda.to_device(V)
 
     construct_adjacency_list_for_query_vector[len(E), block_size](distances_d, adjacency_list_d, V_d, eps_squared)
     
@@ -387,7 +304,7 @@ def assemble_adjacency_list(distances_d, E, V_d, eps_squared, block_size=1024):
     
 
 @cuda.jit
-def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, eps_squared):
+def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V, eps_squared):
     #TODO add A and B to above signature
     """
     Constructs a segment of the adjacency list for a single query vector
