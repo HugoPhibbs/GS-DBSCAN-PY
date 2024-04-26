@@ -3,6 +3,7 @@ import numpy as np
 from src.limited_priority_queue import LimitedPriorityQueue
 import ThrustRTC as trtc
 import cupy as cp
+import networkx as nx
 
 def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     """
@@ -304,7 +305,7 @@ def assemble_adjacency_list(distances, E, V, eps_squared, block_size=1024):
     
 
 @cuda.jit
-def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V, eps_squared):
+def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, A, B, eps_squared):
     #TODO add A and B to above signature
     """
     Constructs a segment of the adjacency list for a single query vector
@@ -316,7 +317,7 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V, 
     Args:
         distances_d: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
         G: The adjacency list to store the neighbourhood vectors of the query vectors. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
-        V: The processed degree array of the query vectors. Has shape (len(X), 1)
+        V_d: The processed degree array of the query vectors. Has shape (len(X), 1). Stored on GPU memory
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
     """
     thread_idx = cuda.threadIdx.x
@@ -327,19 +328,34 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V, 
     curr_index = V_d[i]
     for j in range(distances_d.shape[1]):
         if distances_d[i][j] < eps_squared:
-            adjacency_list_d[curr_index] = j #T
+            adjacency_list_d[curr_index] = j #TODO fix me
             curr_index += 1
 
 ### Performing BFS to find connected components ###
 
-def perform_BFS(G):
+def perform_BFS(adjacency_list, V):
     """
     Performs a BFS on the adjacency list to find the connected components
 
-    As per the G-DBSCAN algorithm. Inspired by "Accelerating large graph algorithms on the GPU with CUDA" Hawish et al
-    """
-    pass # TODO Implement me!
+    Currently this is done with a CPU using the NetworkX library, just as a proof of concept. 
 
+    For C++ version, we can use a parallel BFS implementation
+
+    Args:
+        adjacency_list: The adjacency list as per the G-DBSCAN algorithm. Stored on CPU memory. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
+    
+    Returns:
+        The connected components of the cluster graph
+
+    """
+    # Done this with a CPU for now. Just as a proof of concept. Will be done on the GPU with C++ in the future
+    adjacency_mat = np.zeros(shape=(len(V), len(V)), dtype=bool)
+    for i in range(len(V)):
+        for j in range(V[i], V[i+1]):
+            adjacency_mat[i, adjacency_list[j]] = 1
+
+    G = nx.from_numpy_matrix(adjacency_mat)
+    return nx.connected_components(G)
 
 
 
