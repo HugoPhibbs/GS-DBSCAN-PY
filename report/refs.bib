@@ -1,0 +1,75 @@
+@article{DBSCAN,
+author = {Campello, Ricardo and Kröger, Peer and Sander, Joerg and Zimek, Arthur},
+year = {2019},
+month = {10},
+pages = {},
+title = {Density‐based clustering},
+volume = {10},
+journal = {Wiley Interdisciplinary Reviews: Data Mining and Knowledge Discovery},
+doi = {10.1002/widm.1343}
+}
+
+@article{DBSCAN_REVISITED,
+author = {Schubert, Erich and Sander, J\"{o}rg and Ester, Martin and Kriegel, Hans Peter and Xu, Xiaowei},
+title = {DBSCAN Revisited, Revisited: Why and How You Should (Still) Use DBSCAN},
+year = {2017},
+issue_date = {September 2017},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {42},
+number = {3},
+issn = {0362-5915},
+url = {https://doi.org/10.1145/3068335},
+doi = {10.1145/3068335},
+abstract = {At SIGMOD 2015, an article was presented with the title “DBSCAN Revisited: Mis-Claim, Un-Fixability, and Approximation” that won the conference’s best paper award. In this technical correspondence, we want to point out some inaccuracies in the way DBSCAN was represented, and why the criticism should have been directed at the assumption about the performance of spatial index structures such as R-trees and not at an algorithm that can use such indexes. We will also discuss the relationship of DBSCAN performance and the indexability of the dataset, and discuss some heuristics for choosing appropriate DBSCAN parameters. Some indicators of bad parameters will be proposed to help guide future users of this algorithm in choosing parameters such as to obtain both meaningful results and good performance. In new experiments, we show that the new SIGMOD 2015 methods do not appear to offer practical benefits if the DBSCAN parameters are well chosen and thus they are primarily of theoretical interest. In conclusion, the original DBSCAN algorithm with effective indexes and reasonably chosen parameter values performs competitively compared to the method proposed by Gan and Tao.},
+journal = {ACM Trans. Database Syst.},
+month = {jul},
+articleno = {19},
+numpages = {21},
+keywords = {DBSCAN, density-based clustering, range-search complexity}
+}
+
+@article{G_DBSCAN,
+author = {Andrade, Guilherme and Ramos, Gabriel and Madeira, Daniel and Oliveira, Rafael and Ferreira, Renato and Rocha, Leonardo},
+year = {2013},
+month = {12},
+pages = {369-378},
+title = {G-DBSCAN: A GPU accelerated algorithm for density-based clustering},
+volume = {18},
+journal = {Procedia Computer Science},
+doi = {10.1016/j.procs.2013.05.200}
+}
+
+@misc{CUDA_Guide,
+    title = {CUDA C++ Programming Guide},
+    note = {https://docs.nvidia.com/cuda/pdf/CUDA\_C\_Programming\_Guide.pdf},
+    year = {2024},
+    howpublished = {PDF}
+}
+
+@misc{S_DBSCAN,
+      title={Scalable Density-based Clustering with Random Projections}, 
+      author={Haochuan Xu and Ninh Pham},
+      year={2024},
+      eprint={2402.15679},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+
+@InProceedings{CUDA_graph_algos,
+author="Harish, Pawan
+and Narayanan, P. J.",
+editor="Aluru, Srinivas
+and Parashar, Manish
+and Badrinath, Ramamurthy
+and Prasanna, Viktor K.",
+title="Accelerating Large Graph Algorithms on the GPU Using CUDA",
+booktitle="High Performance Computing -- HiPC 2007",
+year="2007",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="197--208",
+abstract="Large graphs involving millions of vertices are common in many practical applications and are challenging to process. Practical-time implementations using high-end computers are reported but are accessible only to a few. Graphics Processing Units (GPUs) of today have high computation power and low price. They have a restrictive programming model and are tricky to use. The G80 line of Nvidia GPUs can be treated as a SIMD processor array using the CUDA programming model. We present a few fundamental algorithms -- including breadth first search, single source shortest path, and all-pairs shortest path -- using CUDA on large graphs. We can compute the single source shortest path on a 10 million vertex graph in 1.5 seconds using the Nvidia 8800GTX GPU costing {\$}600. In some cases optimal sequential algorithm is not the fastest on the GPU architecture. GPUs have great potential as high-performance co-processors.",
+isbn="978-3-540-77220-0"
+}
+
