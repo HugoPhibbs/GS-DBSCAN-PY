@@ -198,7 +198,12 @@ def find_squared_distances(X, A, B):
     Returns:
         A matrix of squared distances between the query and candidate vectors. Has shape (len(X), 2*k*m)
     """
-    Z = X[B[A]]
+    # Pre sure this is wrong, this is collecting 4*k*m vectors per query vec. Should be 2*k*m.
+    # What the below does is find the closest and furthest vectors to each random vector - where it should just be one or the other
+    # Could do a trick with reformating A and B to make Z = X[B[A]] actually give the right answer
+
+    
+    Z = X[B[A]] # ith row contains contains the 2*k*m candidate vectors for the ith query vector (along the columns)
 
     Z  = Z.reshape(X.shape[0], Z.shape[1] * Z.shape[2], Z.shape[3])
 
@@ -293,7 +298,7 @@ def assemble_adjacency_list(distances, E, V, eps_squared, block_size=1024):
 
     """
 
-    adjacency_list = np.full(shape=(E[-1] + V[-1],), fill_value=-1)
+    adjacency_list = np.full(shape=(int(E[-1] + V[-1]),), fill_value=-1)
     adjacency_list_d = cuda.to_device(adjacency_list)
     distances_d = cp.asarray(distances)
 
@@ -305,7 +310,7 @@ def assemble_adjacency_list(distances, E, V, eps_squared, block_size=1024):
     
 
 @cuda.jit
-def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, A, B, eps_squared):
+def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, A_d, B_d, eps_squared):
     #TODO add A and B to above signature
     """
     Constructs a segment of the adjacency list for a single query vector
@@ -326,9 +331,22 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
 
     i = block_idx * block_size + thread_idx
     curr_index = V_d[i]
+    k = A_d.shape[0] // 2
+    m = B_d.shape[1] // 2
+
+    # TODO can make this more efficient if E[i] == 0 then this loop can be skipped altogether
+    # Can also have a break condition if you have already added E[i] neighbourhood vectors
+
+
     for j in range(distances_d.shape[1]):
-        if distances_d[i][j] < eps_squared:
-            adjacency_list_d[curr_index] = j #TODO fix me
+        if distances_d[i][j] <  eps_squared:
+            A_col = j // m
+            print(i, A_col)
+            B_col = j % (2* m)
+            B_row = A_d[i][A_col]
+            neighbourhood_vector_idx = B_d[B_row][B_col]
+
+            adjacency_list_d[curr_index] = neighbourhood_vector_idx 
             curr_index += 1
 
 ### Performing BFS to find connected components ###
