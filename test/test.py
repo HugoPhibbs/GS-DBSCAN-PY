@@ -41,7 +41,17 @@ class TestSquareDistances(unittest.TestCase):
         ])
 
         start = timer()
-        distances_cp = gsd.find_squared_distances_cupy(X, A, B)
+        distances = gsd.find_squared_distances(X, A, B)
+
+        expected = np.array([
+                            [11,  5,  0,  5],
+                            [11,  6,  9,  0],
+                            [ 5, 14, 14,  0],
+                            [ 9,  5,  9, 14],
+                            [ 5,  0,  6,  8]
+                    ])
+        
+        self.assertTrue(dc.deep_compare(distances, expected))
 
         print(f"Cupy took {timer() - start} seconds")
 
@@ -82,7 +92,67 @@ class TestProcessQueryVectorDegreeArray(unittest.TestCase):
         V_expected = cp.array([0, 3, 7, 8])
         V = gsd.process_query_vector_degree_array(E)
 
-        self.assertTrue(dc.deep_compare(V, V_expected))
+        self.assertTrue(cp.array_equal(V, V_expected))
+
+
+class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
+
+    def test_normally(self):
+
+        X = cp.array([
+            [0, 1, 3],
+            [1, 2, 0],
+            [2, 0, 3],
+            [3, 0, 1],
+            [0, 0, 1]
+        ])
+       
+        A = cp.array([
+            [0, 1],
+            [1, 2],
+            [2, 0],
+            [0, 3],
+            [1, 0]
+        ])
+
+        B = cp.array([
+            [1, 2],
+            [0, 4],
+            [3, 1],
+            [1, 0],
+            [0, 2]
+        ])
+    
+        distances = gsd.find_squared_distances(X, A, B)
+
+        # Distances should be:
+        # [
+        #     [11,  5,  0,  5],
+        #     [11,  6,  9,  0],
+        #     [ 5, 14, 14,  0],
+        #     [ 9,  5,  9, 14],
+        #     [ 5,  0,  6,  8]
+        # ]
+
+        eps_squared = 5.1
+
+        E = cp.array([3, 2, 0, 1, 2])
+        V = gsd.process_query_vector_degree_array(E) # [0, 3, 5, 5, 6]
+
+        distances_d = cuda.to_device(distances)
+        A_d = cuda.to_device(A)
+        B_d = cuda.to_device(B)
+        V_d = cuda.to_device(V)
+    
+        # Figured out adj myself by using B[A]
+        expected_adj_list = cp.array([2, 0, 4, 1, 3, 2, 2, 0, 4])
+        adjacency_list = cp.full(shape=(int(E[-1] + V[-1])), fill_value=-1, dtype=cp.int32)
+        adjacency_list_d = cuda.to_device(adjacency_list)
+
+        gsd.construct_adjacency_list_for_query_vector[1, 5](distances_d, adjacency_list_d, V_d, A_d, B_d, eps_squared)
+        adjacency_list = adjacency_list_d.copy_to_host()
+
+        self.assertTrue(cp.array_equal(adjacency_list, expected_adj_list))
 
 
 class TestAssembleAdjacencyList(unittest.TestCase):
