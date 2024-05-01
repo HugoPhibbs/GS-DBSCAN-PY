@@ -23,16 +23,20 @@ class TestSquareDistances(unittest.TestCase):
             [0, 0, 1]
         ])
        
-
         A = np.array([
-            [0, 1],
-            [1, 2],
-            [2, 0],
             [0, 3],
-            [1, 0]
+            [2, 5],
+            [4, 1],
+            [0, 7],
+            [2, 1]
         ])
 
         B = np.array([
+            [1, 2],
+            [0, 4],
+            [3, 1],
+            [1, 0],
+            [0, 2],
             [1, 2],
             [0, 4],
             [3, 1],
@@ -44,13 +48,14 @@ class TestSquareDistances(unittest.TestCase):
         distances = gsd.find_squared_distances(X, A, B)
 
         expected = np.array([
-                            [11,  5,  0,  5],
-                            [11,  6,  9,  0],
-                            [ 5, 14, 14,  0],
-                            [ 9,  5,  9, 14],
-                            [ 5,  0,  6,  8]
-                    ])
+            [11,  5, 11,  0],
+            [ 9,  0,  0, 14],
+            [ 5,  0,  5,  8],
+            [ 9,  5,  0,  9],
+            [ 9,  6,  5,  0]
+        ])
         
+        self.assertTrue(distances.shape == (X.shape[0], A.shape[1] * B.shape[1])) # Check shape is (N, 2*k*m)
         self.assertTrue(dc.deep_compare(distances, expected))
 
         print(f"Cupy took {timer() - start} seconds")
@@ -62,7 +67,8 @@ class TestSquareDistances(unittest.TestCase):
 
         start = timer()
 
-        gsd.find_squared_distances_cupy(X, A, B)
+        distances = gsd.find_squared_distances(X, A, B)
+        self.assertTrue(distances.shape==(X.shape[0], A.shape[1] * B.shape[1]))
 
         print(f"Cupy took {timer() - start} seconds")
 
