@@ -32,27 +32,27 @@ class TestSquareDistances(unittest.TestCase):
         ])
 
         B = np.array([
-            [1, 2],
-            [0, 4],
-            [3, 1],
-            [1, 0],
-            [0, 2],
-            [1, 2],
-            [0, 4],
-            [3, 1],
-            [1, 0],
-            [0, 2]
+            [1, 2, 3],
+            [0, 4, 1],
+            [3, 1, 0],
+            [1, 0, 2],
+            [0, 2, 3],
+            [1, 2, 0],
+            [0, 4, 1],
+            [3, 1, 2],
+            [1, 0, 4],
+            [0, 2, 1]
         ])
 
         start = timer()
         distances = gsd.find_squared_distances(X, A, B)
 
         expected = np.array([
-            [11,  5, 11,  0],
-            [ 9,  0,  0, 14],
-            [ 5,  0,  5,  8],
-            [ 9,  5,  0,  9],
-            [ 9,  6,  5,  0]
+            [11,  5, 14, 11,  0,  5],
+            [ 9,  0, 11,  0, 14, 11],
+            [ 5,  0,  5,  5,  8, 14],
+            [ 9,  5,  0,  0,  9,  5],
+            [ 9,  6,  5,  5,  0,  6]
         ])
         
         self.assertTrue(distances.shape == (X.shape[0], A.shape[1] * B.shape[1])) # Check shape is (N, 2*k*m)
@@ -113,37 +113,39 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
             [0, 0, 1]
         ])
        
-        A = cp.array([
-            [0, 1],
-            [1, 2],
-            [2, 0],
+        A = np.array([
             [0, 3],
-            [1, 0]
+            [2, 5],
+            [4, 1],
+            [0, 7],
+            [2, 1]
         ])
 
-        B = cp.array([
-            [1, 2],
-            [0, 4],
-            [3, 1],
-            [1, 0],
-            [0, 2]
+        B = np.array([
+            [1, 2, 3],
+            [0, 4, 1],
+            [3, 1, 0],
+            [1, 0, 2],
+            [0, 2, 3],
+            [1, 2, 0],
+            [0, 4, 1],
+            [3, 1, 2],
+            [1, 0, 4],
+            [0, 2, 1]
         ])
-    
         distances = gsd.find_squared_distances(X, A, B)
 
         # Distances should be:
-        # [
-        #     [11,  5,  0,  5],
-        #     [11,  6,  9,  0],
-        #     [ 5, 14, 14,  0],
-        #     [ 9,  5,  9, 14],
-        #     [ 5,  0,  6,  8]
-        # ]
+        # array([[11,  5, 14, 11,  0,  5],
+        #        [ 9,  0, 11,  0, 14, 11],
+        #        [ 5,  0,  5,  5,  8, 14],
+        #        [ 9,  5,  0,  0,  9,  5],
+        #        [ 9,  6,  5,  5,  0,  6]])
 
         eps_squared = 5.1
 
-        E = cp.array([3, 2, 0, 1, 2])
-        V = gsd.process_query_vector_degree_array(E) # [0, 3, 5, 5, 6]
+        E = gsd.construct_query_vector_degree_array(distances, eps_squared)
+        V = gsd.process_query_vector_degree_array(E)
 
         distances_d = cuda.to_device(distances)
         A_d = cuda.to_device(A)
@@ -151,7 +153,7 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
         V_d = cuda.to_device(V)
     
         # Figured out adj myself by using B[A]
-        expected_adj_list = cp.array([2, 0, 4, 1, 3, 2, 2, 0, 4])
+        expected_adj_list = np.array([2, 0, 2, 1, 1, 0, 2, 3, 0, 2, 3, 3, 2, 0, 0, 4])
         adjacency_list = cp.full(shape=(int(E[-1] + V[-1])), fill_value=-1, dtype=cp.int32)
         adjacency_list_d = cuda.to_device(adjacency_list)
 

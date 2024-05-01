@@ -332,7 +332,7 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
     i = block_idx * block_size + thread_idx
     curr_index = V_d[i]
     k = A_d.shape[0] // 2
-    m = B_d.shape[1] // 2
+    m = B_d.shape[1]
 
     # TODO can make this more efficient if E[i] == 0 then this loop can be skipped altogether
     # Can also have a break condition if you have already added E[i] neighbourhood vectors
@@ -341,8 +341,9 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
     for j in range(distances_d.shape[1]):
         if distances_d[i][j] <  eps_squared:
             A_col = j // m
-            print(i, A_col)
-            B_col = j % (2* m)
+            B_col = j % m
+            if i == 0:
+                print(j, A_col, B_col)
             B_row = A_d[i][A_col]
             neighbourhood_vector_idx = B_d[B_row][B_col]
 
