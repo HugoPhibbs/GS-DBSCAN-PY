@@ -99,7 +99,7 @@ def construct_A_B_matrices(X, Y, k, m):
 
     A has a shape of (len(X), 2 * k). The i'th row of A stores the indices of the 2*k closest and furthest random vectors to the i'th point in X. Closest in first k slots and furthest in the last k slots.
 
-    B has a shape of (len(D), 2 * m). The j'th row of B stores the indices of the 2*m closest and furthest points to the j'th random vector in D. Closest in first m slots and furthest in the last m slots.
+    B has a shape of (2*len(D), m). The (2j)'th row of B stores the indices of vectors closest to the j'th random vector. And the (2j+1)'th row of B stores the indices of the vectors furthest from the j'th random vector
 
     Args: 
         X: point dataset, a matrix of points stored along the ROWS
@@ -120,8 +120,8 @@ def construct_A_B_matrices(X, Y, k, m):
 
     for j in range(len(A)):
         top_k, bottom_k = top_closest_and_furthest_indices(product[j], k)
-        A[2*j, :k] = top_k
-        A[2*j+1, k:] = bottom_k
+        A[j, :k] = 2*top_k
+        A[j, k:] = 2*bottom_k + 1
 
     for j in range(len(B)):
         top_m, bottom_m = top_closest_and_furthest_indices(product[:, j], m)
@@ -139,7 +139,7 @@ def top_closest_and_furthest_indices(vector, n):
         k: k as mentioned   
 
     Returns:
-        A tuple of two lists. The first list is the top k closest indices and the second list is the top m furthest indices
+        A tuple of two np arrays. The first array is the top k closest indices and the second array is the top m furthest indices
     """
     top_heap = LimitedPriorityQueue(n)
     bottom_heap = LimitedPriorityQueue(n, reverse=True)
@@ -147,7 +147,7 @@ def top_closest_and_furthest_indices(vector, n):
         entry = vector[i]
         top_heap.push(i, entry)
         bottom_heap.push(i, entry)
-    return top_heap.heap_items(), bottom_heap.heap_items()
+    return np.array(top_heap.heap_items()), np.array(bottom_heap.heap_items())
 
 def dataset_random_projections(X, Y):
     """
@@ -193,7 +193,7 @@ def find_squared_distances(X, A, B):
     Args:
         X: dataset of vectors stored along the ROWS
         A: matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
-        B: matrix of indices of the closest and furthest points to each random vector in D. Has shape (len(D), 2*m)
+        B: matrix of indices of the closest and furthest points to each random vector in D. Has shape (2*len(D), m)
 
     Returns:
         A matrix of squared distances between the query and candidate vectors. Has shape (len(X), 2*k*m)
@@ -207,7 +207,7 @@ def find_squared_distances(X, A, B):
 
     Z  = Z.reshape(X.shape[0], Z.shape[1] * Z.shape[2], Z.shape[3])
 
-    Y = Z - X[:, np.newaxis, :]
+    Y = Z - X[:, cp.newaxis, :]
 
     return cp.sum(Y**2, axis=2)
 
@@ -278,7 +278,7 @@ def process_query_vector_degree_array(E):
     #trtc.Exclusive_Scan(E_d, V_d)
     #return cp.array(V_d.to_host())
 
-def assemble_adjacency_list(distances, E, V, eps_squared, block_size=1024):
+def assemble_adjacency_list(distances, E, A, B, V, eps_squared, block_size=1024):
     """
     Assembles the adjacency list as per the G-DBSCAN algorithm
 
@@ -287,6 +287,8 @@ def assemble_adjacency_list(distances, E, V, eps_squared, block_size=1024):
     Args:
         distances: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
         E: CuPy array. The degree array of the query vectors. Has shape (len(X), 1)
+        A: CuPy array. The matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
+        B: CuPy array. The matrix of indices of the closest and furthest points to each random vector in D. Has shape (2*len(D), m)
         V: CuPy array. The processed degree array of the query vectors (as per the G-DBSCAN algorithm). Has shape (len(X), 1)
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
         k: k as described above
@@ -297,14 +299,15 @@ def assemble_adjacency_list(distances, E, V, eps_squared, block_size=1024):
         An adjacency list as per the G-DBSCAN algorithm. Stored on CPU memory. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
 
     """
-
     adjacency_list = np.full(shape=(int(E[-1] + V[-1]),), fill_value=-1)
     adjacency_list_d = cuda.to_device(adjacency_list)
     distances_d = cp.asarray(distances)
-
+    	
+    A_d = cuda.to_device(A)
+    B_d = cuda.to_device(B)
     V_d = cuda.to_device(V)
 
-    construct_adjacency_list_for_query_vector[len(E), block_size](distances_d, adjacency_list_d, V_d, eps_squared)
+    construct_adjacency_list_for_query_vector[len(E), block_size](distances_d, adjacency_list_d, A_d, B_d, V_d, eps_squared)
     
     return adjacency_list_d.copy_to_host()
     
@@ -321,7 +324,9 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
     
     Args:
         distances_d: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
-        G: The adjacency list to store the neighbourhood vectors of the query vectors. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
+        adjacency_list_d: The adjacency list to store the neighbourhood vectors of the query vectors. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
+        A_d: The matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k). Stored on GPU memory
+        B_d: The matrix of indices of the closest and furthest points to each random vector in D. Has shape (2*len(D), m). Stored on GPU memory
         V_d: The processed degree array of the query vectors. Has shape (len(X), 1). Stored on GPU memory
         eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
     """
