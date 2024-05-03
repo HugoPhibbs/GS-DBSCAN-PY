@@ -62,70 +62,21 @@ class TestSquareDistances(unittest.TestCase):
         print(f"Cupy took {timer() - start} seconds")
 
     def test_normally_large_mats(self):
-        n = 80_000 # Mimic MNIST dataset
+        n = 70_000 # Mimic MNIST dataset
         d = 784
-        m = 2000
-        k = 2
+        m = 50
+        k = 40
         D = 1000
         X = cp.random.uniform(size=(n, d), dtype=cp.float32) # Since eps is only 2DP, no need to go to double precision (float64)
         A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for n
         B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
 
         start = timer()
+        distances = gsd.find_distances(X, A, B)
 
-        distances, (z_times, z1_times, z2_times, y_times, d_times), (mem_u, mem_f, mem_t) = gsd.find_distances(X, A, B)
-        self.assertTrue(distances.shape==(X.shape[0], A.shape[1] * B.shape[1]))
+        self.assertTrue(distances.shape == (n, 2*k*m))
 
-        plt.figure()
-        plt.plot(np.log(z_times[10:])) # Initial times are very high, so ignore them
-        plt.savefig("z_times.png") # For some reason gets very slow after the 240th batch or so
-        plt.xlabel("Batch")
-        plt.ylabel("Time (log)")
-
-        plt.figure()
-        plt.plot(np.log(z1_times[10:])) # Initial times are very high, so ignore them
-        plt.savefig("z1_times.png") # For some reason gets very slow after the 240th batch or so
-        plt.xlabel("Batch")
-        plt.ylabel("Time (log)")
-
-        plt.figure()
-        plt.plot(np.log(z2_times[10:])) # Initial times are very high, so ignore them
-        plt.savefig("z2_times.png") # For some reason gets very slow after the 240th batch or so
-        plt.xlabel("Batch")
-        plt.ylabel("Time (log)")
-
-        plt.figure()
-        plt.plot(np.log(y_times[10:]))
-        plt.savefig("y_times.png")
-        plt.xlabel("Batch")
-        plt.ylabel("Time (log)")
-
-        plt.figure()
-        plt.plot(np.log(d_times[10:]))
-        plt.savefig("d_times.png")
-        plt.xlabel("Batch")
-        plt.ylabel("Time (log)")
-
-        plt.figure()
-        plt.plot(mem_u)
-        plt.savefig("mem_u.png")
-        plt.xlabel("Batch")
-        plt.ylabel("Bytes (log)")
-
-        plt.figure()
-        plt.plot(mem_t)
-        plt.savefig("mem_t.png")
-        plt.xlabel("Batch")
-        plt.ylabel("Bytes (log)")
-
-        plt.figure()
-        plt.plot(mem_f)
-        plt.savefig("mem_f.png")
-        plt.xlabel("Batch")
-        plt.ylabel("Bytes (log)")
-
-        print(f"Cupy took {timer() - start} seconds")
-
+        print(f"Test took {timer() - start} seconds")
 
 class TestContructQueryVectorDegreeArray(unittest.TestCase):
 
@@ -136,13 +87,36 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
             [1, 8, 9, 11],
             [15, 2, 6, 7]
         ])
-        eps_squared = 2.1
+        eps = 2.1
 
-        E = gsd.construct_query_vector_degree_array(distances, eps_squared)
+        E = gsd.construct_query_vector_degree_array(distances, eps)
 
         expected = np.array([3, 4, 1, 1])
 
         self.assertTrue(dc.deep_compare(E, expected))
+
+    def test_normally_large_mats(self):
+        n = 70_000 # Mimic MNIST dataset
+        d = 784
+        m = 50
+        k = 5
+        D = 1024
+        X = cp.random.uniform(size=(n, d), dtype=cp.float32) # Since eps is only 2DP, no need to go to double precision (float64)
+        A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for n
+        B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
+
+        distances = gsd.find_distances(X, A, B)
+        eps = 2.1
+
+        E = gsd.construct_query_vector_degree_array(distances, eps)
+
+        self.assertTrue(E.shape == (n,))
+
+        start = timer()
+
+        V = gsd.process_query_vector_degree_array(E)
+
+        print(f"Test took {timer() - start} seconds")
 
 class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
@@ -154,6 +128,25 @@ class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
         self.assertTrue(cp.array_equal(V, V_expected))
 
+    def test_normally_large_mats(self):
+        n = 70_000 # Mimic MNIST dataset
+        d = 784
+        m = 50
+        k = 5
+        D = 1024
+        X = cp.random.uniform(size=(n, d), dtype=cp.float32) # Since eps is only 2DP, no need to go to double precision (float64)
+        A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for n
+        B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
+
+        distances = gsd.find_distances(X, A, B)
+        eps = 2.1
+
+        start = timer()
+        E = gsd.construct_query_vector_degree_array(distances, eps)
+
+        self.assertTrue(E.shape == (n,))
+
+        print(f"Test took {timer() - start} seconds")
 
 class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
 
@@ -194,11 +187,11 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
         #        [ 9,  0, 11,  0, 14, 11],
         #        [ 5,  0,  5,  5,  8, 14],
         #        [ 9,  5,  0,  0,  9,  5],
-        #        [ 9,  6,  5,  5,  0,  6]])
+        #        [ 9,  6,  5,  5,  0,  6]]) ** 2
 
-        eps_squared = 5.1
+        eps = np.sqrt(5.1)
 
-        E = gsd.construct_query_vector_degree_array(distances, eps_squared)
+        E = gsd.construct_query_vector_degree_array(distances, eps)
         V = gsd.process_query_vector_degree_array(E)
 
         distances_d = cuda.to_device(distances)
@@ -211,7 +204,7 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
         adjacency_list = cp.full(shape=(int(E[-1] + V[-1])), fill_value=-1, dtype=cp.int32)
         adjacency_list_d = cuda.to_device(adjacency_list)
 
-        gsd.construct_adjacency_list_for_query_vector[1, 5](distances_d, adjacency_list_d, V_d, A_d, B_d, eps_squared)
+        gsd.construct_adjacency_list_for_query_vector[1, 5](distances_d, adjacency_list_d, V_d, A_d, B_d, eps)
         adjacency_list = adjacency_list_d.copy_to_host()
 
         self.assertTrue(cp.array_equal(adjacency_list, expected_adj_list))
@@ -220,21 +213,68 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
 class TestAssembleAdjacencyList(unittest.TestCase):
 
     def test_normally(self):
-        V = np.array([0, 3, 7, 8])
-        E = [3, 4, 1, 1]
-
-        distances = np.array([
-            [0, 1, 2, 3],
-            [0, 2, 1, 0],
-            [1, 8, 9, 11],
-            [15, 2, 6, 7]
+        X = cp.array([
+            [0, 1, 3],
+            [1, 2, 0],
+            [2, 0, 3],
+            [3, 0, 1],
+            [0, 0, 1]
         ])
 
-        adj_list = gsd.assemble_adjacency_list(V, E, distances)
+        A = cp.array([
+            [0, 3],
+            [2, 5],
+            [4, 1],
+            [0, 7],
+            [2, 1]
+        ])
 
-        expected = []
+        B = cp.array([
+            [1, 2, 3],
+            [0, 4, 1],
+            [3, 1, 0],
+            [1, 0, 2],
+            [0, 2, 3],
+            [1, 2, 0],
+            [0, 4, 1],
+            [3, 1, 2],
+            [1, 0, 4],
+            [0, 2, 1]
+        ])
 
-        self.assertTrue(dc.deep_compare(adj_list, expected))
+        eps = 2
+        distances = gsd.find_distances(X, A, B)
+        E = gsd.construct_query_vector_degree_array(distances, eps)
+        V = gsd.process_query_vector_degree_array(E)
+
+        adj_list = gsd.assemble_adjacency_list(distances, E, A, B, V, eps)
+
+        expected_adj_list = np.array([2, 0, 2, 1, 1, 0, 2, 3, 0, 2, 3, 3, 2, 0, 0, 4])
+
+        self.assertTrue(np.array_equal(adj_list, expected_adj_list))
+
+    def test_normally_large_mats(self):
+        n = 70_000 # Mimic MNIST dataset
+        d = 784
+        m = 50
+        k = 5
+        D = 1024
+        X = cp.random.uniform(size=(n, d), dtype=cp.float32) # Since eps is only 2DP, no need to go to double precision (float64)
+        A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for n
+        B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
+
+        distances = gsd.find_distances(X, A, B)
+        eps = 2.1
+
+        E = gsd.construct_query_vector_degree_array(distances, eps)
+        V = gsd.process_query_vector_degree_array(E)
+
+        start = timer()
+
+        adj_list = gsd.assemble_adjacency_list(distances, E, A, B, V, eps)
+
+        print(f"Test took {timer() - start} seconds")
+
 
 
 class TestContructClusterGraph(unittest.TestCase):
