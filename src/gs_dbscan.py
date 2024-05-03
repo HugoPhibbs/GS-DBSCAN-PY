@@ -204,66 +204,23 @@ def find_distances(X, A, B):
     k = A.shape[1] // 2
     m = B.shape[1]
 
-    # Calculate the appropriate batch_size
     n = X.shape[0]
-    d = X.shape[1]
 
-    batch_size = get_batch_size(n, d, k, m)
-
-    # Z_batch = cp.empty(shape=(batch_size, 2*k*m, d), dtype=cp.float16)
+    batch_size = get_batch_size(n, X.shape[1], k, m)
 
     distances = cp.empty(shape=(n, 2*k*m), dtype=cp.float16) # float32 causes a memory overload. float16 is fine (for eps 2DP)
 
-    z_times = np.zeros(n//batch_size)
-    z_1_times = np.zeros(n//batch_size)
-    z_2_times = np.zeros(n//batch_size)
-    y_times = np.zeros(n//batch_size)
-    d_times = np.zeros(n//batch_size)
-    mem_u = np.zeros(n//batch_size)
-    mem_f = np.zeros(n//batch_size)
-    mem_t = np.zeros(n//batch_size)
-
     for i in range(0, n, batch_size):
-        print(i, n)
         max_batch_idx = min(i+batch_size, X.shape[0])
-        Z_t = timer()
-        Z_t_1 = timer()
 
         Z_batch = X[B[A[i:max_batch_idx]]]
-        Z_t_1_end = timer() - Z_t_1
-        print(f"Time taken to get batch: {Z_t_1_end}")
-
-        Z_t_2 = timer()
         Z_batch	 = Z_batch.reshape(Z_batch.shape[0], Z_batch.shape[1] * Z_batch.shape[2], Z_batch.shape[3])
-        Z_t_2_end = timer() - Z_t_2
-        print(f"Time taken to reshape batch: {Z_t_2_end}")
 
-        z_tot = timer() - Z_t
-        print(f"Time taken to calculate Z: {z_tot}")
-
-        y_t = timer()
         Y_batch = Z_batch - X[i:max_batch_idx, cp.newaxis, :]
-        y_tot = timer() - y_t
-        print(f"Time taken to calculate Y: {y_tot}")
 
-        d_t = timer()
         distances[i:max_batch_idx] = cp.linalg.norm(Y_batch, axis=2) # using linalg.norm faster than cp.sum(Y**2, axis=
-        d_tot = timer() - d_t
-        print(f"Time taken to calculate distances: {d_tot}")
-
-        z_times[i//batch_size] = z_tot
-        z_1_times[i//batch_size] = Z_t_1_end
-        z_2_times[i//batch_size] = Z_t_2_end
-        y_times[i//batch_size] = y_tot
-        d_times[i//batch_size] = d_tot
-        mem_u[i//batch_size] = cp.get_default_memory_pool().used_bytes()
-        mem_f[i//batch_size] = cp.get_default_memory_pool().free_bytes()
-        mem_t[i//batch_size] = cp.get_default_memory_pool().total_bytes()
-
-        # if i // batch_size == 200:
-        #     cp.get_default_memory_pool().free_all_blocks()
     
-    return distances, (z_times, z_1_times, z_2_times, y_times, d_times), (mem_u, mem_f, mem_t)
+    return distances
 
 def get_batch_size(n, d, k, m):
     """
@@ -277,19 +234,21 @@ def get_batch_size(n, d, k, m):
         k: k as described above
         m: m as described above
     """
-    batch_size = int((n*d*2*k*m) // (1024**3)) // 4 # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
+
+    # For some reason, no matter what batch size you choose, after 200 iterations
+    # Of the above forloop, the performance falls of a cliff
+
+    alpha = 1.2 # Can be adjusted to make the batch size smaller or larger
+
+    batch_size = int((n*d*2*k*m) // (1024**3) // alpha) # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
 
     if batch_size == 0:
         return n
-
-    b_t = timer()
 
     for divisor in range(batch_size - 1, 0, -1):
         if n % divisor == 0:
             batch_size = divisor
             break
-
-    print(f"{b_t-timer()} to calc batch size")
 
     return batch_size
 
@@ -332,9 +291,8 @@ def construct_query_vector_degree_array(distances, eps):
     
     Returns:
         The degree array of the query vectors. Has shape (len(X), 1)
-    """ 
-    indices_mask = distances < eps
-    return cp.sum(indices_mask, axis=1)
+    """
+    return cp.sum(distances < eps, axis=1)
     
 def process_query_vector_degree_array(E):
     """
@@ -380,15 +338,16 @@ def assemble_adjacency_list(distances, E, A, B, V, eps, block_size=1024):
         An adjacency list as per the G-DBSCAN algorithm. Stored on CPU memory. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
 
     """
-    adjacency_list = np.full(shape=(int(E[-1] + V[-1]),), fill_value=-1)
-    adjacency_list_d = cuda.to_device(adjacency_list)
-    distances_d = cp.asarray(distances)
+    adjacency_list = cp.full(shape=(int(E[-1] + V[-1]),), fill_value=-1)
+    adjacency_list_d = cuda.as_cuda_array(adjacency_list)
+    distances_d = cuda.as_cuda_array(distances)
     	
-    A_d = cuda.to_device(A)
-    B_d = cuda.to_device(B)
-    V_d = cuda.to_device(V)
+    A_d = cuda.as_cuda_array(A)
+    B_d = cuda.as_cuda_array(B)
+    V_d = cuda.as_cuda_array(V)
 
-    construct_adjacency_list_for_query_vector[len(E), block_size](distances_d, adjacency_list_d, A_d, B_d, V_d, eps)
+    construct_adjacency_list_for_query_vector[len(E) // block_size, block_size](distances_d, adjacency_list_d, V_d, A_d, B_d, eps)
+    cuda.synchronize()
     
     return adjacency_list_d.copy_to_host()
     
