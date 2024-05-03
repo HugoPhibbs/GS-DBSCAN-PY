@@ -6,6 +6,7 @@ import deepcomparer as dc
 import ThrustRTC as trtc
 from timeit import default_timer as timer
 import cupy as cp
+import matplotlib.pyplot as plt
 
 class TestConstructingABMatrices(unittest.TestCase):
 
@@ -45,7 +46,7 @@ class TestSquareDistances(unittest.TestCase):
         ])
 
         start = timer()
-        distances = gsd.find_squared_distances(X, A, B)
+        distances = gsd.find_distances(X, A, B)
 
         expected = np.array([
             [11,  5, 14, 11,  0,  5],
@@ -56,7 +57,7 @@ class TestSquareDistances(unittest.TestCase):
         ])
         
         self.assertTrue(distances.shape == (X.shape[0], A.shape[1] * B.shape[1])) # Check shape is (N, 2*k*m)
-        self.assertTrue(dc.deep_compare(distances, expected))
+        self.assertTrue(dc.deep_compare(distances**2, expected**2))
 
         print(f"Cupy took {timer() - start} seconds")
 
@@ -72,8 +73,13 @@ class TestSquareDistances(unittest.TestCase):
 
         start = timer()
 
-        distances = gsd.find_squared_distances(X, A, B)
+        distances, times = gsd.find_distances(X, A, B)
         self.assertTrue(distances.shape==(X.shape[0], A.shape[1] * B.shape[1]))
+
+        plt.plot(np.log(times[10:-10]))
+        plt.savefig("times.png") # For some reason gets very slow after the 240th batch
+        plt.xlabel("Batch")
+        plt.ylabel("Time (log)")
 
         print(f"Cupy took {timer() - start} seconds")
 
@@ -138,7 +144,7 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
             [1, 0, 4],
             [0, 2, 1]
         ])
-        distances = gsd.find_squared_distances(X, A, B)
+        distances = gsd.find_distances(X, A, B)
 
         # Distances should be:
         # array([[11,  5, 14, 11,  0,  5],
