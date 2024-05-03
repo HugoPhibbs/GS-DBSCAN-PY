@@ -61,8 +61,8 @@ class TestSquareDistances(unittest.TestCase):
         print(f"Cupy took {timer() - start} seconds")
 
     def test_normally_large_mats(self):
-        n = int(1e6)
-        d = 50
+        n = 70_000 # Mimic MNIST dataset
+        d = 784
         m = 2000
         k = 2
         D = 1000

@@ -212,7 +212,7 @@ def find_squared_distances(X, A, B):
     # Calculate the appropriate batch_size
     n = X.shape[0]
     d = X.shape[1]
-    batch_size = int((n*d*2*k*m) // (1024**3)) # 1GB
+    batch_size = int((n*d*2*k*m) // (1024**3)) // 2# 1GB
     # Z_batch = cp.empty(shape=(batch_size, 2*k*m, d), dtype=cp.float16)
 
     for i in range(0, X.shape[0], batch_size):
@@ -238,7 +238,7 @@ def find_squared_distances(X, A, B):
         del(Z_batch)
 
         d_t = timer()
-        distances_squared[i:max_batch_idx] = cp.sum(Y_batch**2, axis=2)
+        distances_squared[i:max_batch_idx] = cp.linalg.norm(Y_batch, axis=2) # using linalg.norm faster than cp.sum(Y**2, axis=2)
         print(f"Time taken to calculate distances: {timer() - d_t}")
         del(Y_batch)
         print(i, n)
