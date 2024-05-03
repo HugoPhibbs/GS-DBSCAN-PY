@@ -214,10 +214,14 @@ def find_distances(X, A, B):
 
     distances = cp.empty(shape=(n, 2*k*m), dtype=cp.float16) # float32 causes a memory overload. float16 is fine (for eps 2DP)
 
-    times = np.zeros(n//batch_size)
     z_times = np.zeros(n//batch_size)
+    z_1_times = np.zeros(n//batch_size)
+    z_2_times = np.zeros(n//batch_size)
     y_times = np.zeros(n//batch_size)
     d_times = np.zeros(n//batch_size)
+    mem_u = np.zeros(n//batch_size)
+    mem_f = np.zeros(n//batch_size)
+    mem_t = np.zeros(n//batch_size)
 
     for i in range(0, n, batch_size):
         print(i, n)
@@ -226,11 +230,13 @@ def find_distances(X, A, B):
         Z_t_1 = timer()
 
         Z_batch = X[B[A[i:max_batch_idx]]]
-        print(f"Time taken to get batch: {timer() - Z_t_1}")
+        Z_t_1_end = timer() - Z_t_1
+        print(f"Time taken to get batch: {Z_t_1_end}")
 
         Z_t_2 = timer()
         Z_batch	 = Z_batch.reshape(Z_batch.shape[0], Z_batch.shape[1] * Z_batch.shape[2], Z_batch.shape[3])
-        print(f"Time taken to reshape batch: {timer() - Z_t_2}")
+        Z_t_2_end = timer() - Z_t_2
+        print(f"Time taken to reshape batch: {Z_t_2_end}")
 
         z_tot = timer() - Z_t
         print(f"Time taken to calculate Z: {z_tot}")
@@ -246,14 +252,18 @@ def find_distances(X, A, B):
         print(f"Time taken to calculate distances: {d_tot}")
 
         z_times[i//batch_size] = z_tot
+        z_1_times[i//batch_size] = Z_t_1_end
+        z_2_times[i//batch_size] = Z_t_2_end
         y_times[i//batch_size] = y_tot
         d_times[i//batch_size] = d_tot
+        mem_u[i//batch_size] = cp.get_default_memory_pool().used_bytes()
+        mem_f[i//batch_size] = cp.get_default_memory_pool().free_bytes()
+        mem_t[i//batch_size] = cp.get_default_memory_pool().total_bytes()
 
-
-        # del(Y_batch, Z_batch)
-        # cp.cuda.stream.get_current_stream().synchronize()
+        # if i // batch_size == 200:
+        #     cp.get_default_memory_pool().free_all_blocks()
     
-    return distances, times
+    return distances, (z_times, z_1_times, z_2_times, y_times, d_times), (mem_u, mem_f, mem_t)
 
 def get_batch_size(n, d, k, m):
     """
@@ -267,10 +277,12 @@ def get_batch_size(n, d, k, m):
         k: k as described above
         m: m as described above
     """
-    batch_size = int((n*d*2*k*m) // (1024**3)) // 2 # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
+    batch_size = int((n*d*2*k*m) // (1024**3)) // 4 # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
+
+    if batch_size == 0:
+        return n
 
     b_t = timer()
-
 
     for divisor in range(batch_size - 1, 0, -1):
         if n % divisor == 0:

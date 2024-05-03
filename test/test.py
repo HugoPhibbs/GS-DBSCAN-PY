@@ -16,7 +16,7 @@ class TestConstructingABMatrices(unittest.TestCase):
 class TestSquareDistances(unittest.TestCase):
 
     def test_normally(self):
-        X = np.array([
+        X = cp.array([
             [0, 1, 3],
             [1, 2, 0],
             [2, 0, 3],
@@ -24,7 +24,7 @@ class TestSquareDistances(unittest.TestCase):
             [0, 0, 1]
         ])
        
-        A = np.array([
+        A = cp.array([
             [0, 3],
             [2, 5],
             [4, 1],
@@ -32,7 +32,7 @@ class TestSquareDistances(unittest.TestCase):
             [2, 1]
         ])
 
-        B = np.array([
+        B = cp.array([
             [1, 2, 3],
             [0, 4, 1],
             [3, 1, 0],
@@ -46,23 +46,23 @@ class TestSquareDistances(unittest.TestCase):
         ])
 
         start = timer()
-        distances = gsd.find_distances(X, A, B)
+        distances, times, mem = gsd.find_distances(X, A, B)
 
-        expected = np.array([
+        expected = cp.sqrt(cp.array([
             [11,  5, 14, 11,  0,  5],
             [ 9,  0, 11,  0, 14, 11],
             [ 5,  0,  5,  5,  8, 14],
             [ 9,  5,  0,  0,  9,  5],
             [ 9,  6,  5,  5,  0,  6]
-        ])
+        ], dtype=cp.float16))
         
         self.assertTrue(distances.shape == (X.shape[0], A.shape[1] * B.shape[1])) # Check shape is (N, 2*k*m)
-        self.assertTrue(dc.deep_compare(distances**2, expected**2))
+        self.assertTrue(cp.array_equal(distances, expected))
 
         print(f"Cupy took {timer() - start} seconds")
 
     def test_normally_large_mats(self):
-        n = 70_000 # Mimic MNIST dataset
+        n = 80_000 # Mimic MNIST dataset
         d = 784
         m = 2000
         k = 2
@@ -73,13 +73,56 @@ class TestSquareDistances(unittest.TestCase):
 
         start = timer()
 
-        distances, times = gsd.find_distances(X, A, B)
+        distances, (z_times, z1_times, z2_times, y_times, d_times), (mem_u, mem_f, mem_t) = gsd.find_distances(X, A, B)
         self.assertTrue(distances.shape==(X.shape[0], A.shape[1] * B.shape[1]))
 
-        plt.plot(np.log(times[10:-10]))
-        plt.savefig("times.png") # For some reason gets very slow after the 240th batch
+        plt.figure()
+        plt.plot(np.log(z_times[10:])) # Initial times are very high, so ignore them
+        plt.savefig("z_times.png") # For some reason gets very slow after the 240th batch or so
         plt.xlabel("Batch")
         plt.ylabel("Time (log)")
+
+        plt.figure()
+        plt.plot(np.log(z1_times[10:])) # Initial times are very high, so ignore them
+        plt.savefig("z1_times.png") # For some reason gets very slow after the 240th batch or so
+        plt.xlabel("Batch")
+        plt.ylabel("Time (log)")
+
+        plt.figure()
+        plt.plot(np.log(z2_times[10:])) # Initial times are very high, so ignore them
+        plt.savefig("z2_times.png") # For some reason gets very slow after the 240th batch or so
+        plt.xlabel("Batch")
+        plt.ylabel("Time (log)")
+
+        plt.figure()
+        plt.plot(np.log(y_times[10:]))
+        plt.savefig("y_times.png")
+        plt.xlabel("Batch")
+        plt.ylabel("Time (log)")
+
+        plt.figure()
+        plt.plot(np.log(d_times[10:]))
+        plt.savefig("d_times.png")
+        plt.xlabel("Batch")
+        plt.ylabel("Time (log)")
+
+        plt.figure()
+        plt.plot(mem_u)
+        plt.savefig("mem_u.png")
+        plt.xlabel("Batch")
+        plt.ylabel("Bytes (log)")
+
+        plt.figure()
+        plt.plot(mem_t)
+        plt.savefig("mem_t.png")
+        plt.xlabel("Batch")
+        plt.ylabel("Bytes (log)")
+
+        plt.figure()
+        plt.plot(mem_f)
+        plt.savefig("mem_f.png")
+        plt.xlabel("Batch")
+        plt.ylabel("Bytes (log)")
 
         print(f"Cupy took {timer() - start} seconds")
 
