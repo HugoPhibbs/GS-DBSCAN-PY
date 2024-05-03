@@ -4,6 +4,7 @@ from src.limited_priority_queue import LimitedPriorityQueue
 import ThrustRTC as trtc
 import cupy as cp
 import networkx as nx
+from timeit import default_timer as timer
 
 def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     """
@@ -198,13 +199,53 @@ def find_squared_distances(X, A, B):
     Returns:
         A matrix of squared distances between the query and candidate vectors. Has shape (len(X), 2*k*m)
     """
-    Z = X[B[A]] # ith row contains contains the 2*k*m candidate vectors for the ith query vector (along the columns)
+    start = timer()
 
-    Z  = Z.reshape(X.shape[0], Z.shape[1] * Z.shape[2], Z.shape[3])
+    k = A.shape[1] // 2
+    m = B.shape[1]
+    distances_squared = cp.empty(shape=(X.shape[0], 2*k*m), dtype=cp.float16) # float32 causes a memory overload. float16 is fine (for eps 2DP)
+    
+    # TODO allocate batch size intelligently. S
 
-    Y = Z - X[:, cp.newaxis, :]
+    # Say Z_batch is no more than 1GB or something
 
-    return cp.sum(Y**2, axis=2)
+    # Calculate the appropriate batch_size
+    n = X.shape[0]
+    d = X.shape[1]
+    batch_size = int((n*d*2*k*m) // (1024**3)) # 1GB
+    # Z_batch = cp.empty(shape=(batch_size, 2*k*m, d), dtype=cp.float16)
+
+    for i in range(0, X.shape[0], batch_size):
+        max_batch_idx = min(i+batch_size, X.shape[0])
+        Z_t = timer()
+        Z_t_1 = timer()
+
+        # Z_batch
+        
+        Z_batch = X[B[A[i:max_batch_idx]]]
+        print(f"Time taken to get batch: {timer() - Z_t_1}")
+
+        Z_t_2 = timer()
+        Z_batch	 = Z_batch.reshape(Z_batch.shape[0], Z_batch.shape[1] * Z_batch.shape[2], Z_batch.shape[3])
+        print(f"Time taken to rehape batch: {timer() - Z_t_2}")
+
+        print(f"Time taken to calculate Z: {timer() - Z_t}")
+
+        y_t = timer()
+        Y_batch = Z_batch - X[i:max_batch_idx, cp.newaxis, :]
+        print(f"Time taken to calculate Y: {timer() - y_t}")
+        
+        del(Z_batch)
+
+        d_t = timer()
+        distances_squared[i:max_batch_idx] = cp.sum(Y_batch**2, axis=2)
+        print(f"Time taken to calculate distances: {timer() - d_t}")
+        del(Y_batch)
+        print(i, n)
+
+    print(f"Time taken: {timer() - start} seconds")
+    
+    return distances_squared
 
 
 ### Constructing the cluster graph ###
@@ -331,7 +372,6 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
 
     i = block_idx * block_size + thread_idx
     curr_index = V_d[i]
-    k = A_d.shape[0] // 2
     m = B_d.shape[1]
 
     # TODO can make this more efficient if E[i] == 0 then this loop can be skipped altogether

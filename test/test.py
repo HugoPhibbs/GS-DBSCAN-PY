@@ -61,9 +61,14 @@ class TestSquareDistances(unittest.TestCase):
         print(f"Cupy took {timer() - start} seconds")
 
     def test_normally_large_mats(self):
-        X = cp.random.uniform(size=(10000, 50))
-        A = cp.random.randint(size=(10000, 20), low=0, high=50-1)
-        B = cp.random.randint(size=(50, 50), low=0, high=X.shape[0] - 1)
+        n = int(1e6)
+        d = 50
+        m = 2000
+        k = 2
+        D = 1000
+        X = cp.random.uniform(size=(n, d), dtype=cp.float32) # Since eps is only 2DP, no need to go to double precision (float64)
+        A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for n
+        B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
 
         start = timer()
 
