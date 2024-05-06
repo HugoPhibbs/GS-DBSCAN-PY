@@ -290,7 +290,7 @@ def construct_query_vector_degree_array(distances, eps):
 
     Args:
         distances: The matrix containing the distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
-        eps: The epsilon value for DBSCAN. Should be a scalar array with the same datatype as the distances array
+        eps: The epsilon value for DBSCAN. Should be a scalar cupy array with the same datatype as the distances array
     
     Returns:
         The degree array of the query vectors. Has shape (len(X), 1)

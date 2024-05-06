@@ -59,8 +59,6 @@ class TestFindDistances(unittest.TestCase):
         self.assertTrue(distances.shape == (X.shape[0], A.shape[1] * B.shape[1])) # Check shape is (N, 2*k*m)
         self.assertTrue(cp.array_equal(distances, expected))
 
-        # TODO why is everything
-
         print(f"Cupy took {timer() - start} seconds")
 
     def test_normally_mnist(self):
@@ -84,7 +82,7 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
             [1, 8, 9, 11],
             [15, 2, 6, 7]
         ])
-        eps = 2.1
+        eps = cp.array(2.1, dtype = distances.dtype)
 
         E = gsd.construct_query_vector_degree_array(distances, eps)
 
@@ -137,7 +135,7 @@ class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
         distances = gsd.find_distances(X, A, B)
 
-        eps = 2.1
+        eps = cp.array(2.1, dtype = distances.dtype)
         E = gsd.construct_query_vector_degree_array(distances, eps)
 
         start = timer()
@@ -152,7 +150,7 @@ class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
         distances = gsd.find_distances(X, A, B, alpha = 100)
 
-        eps = 2.1
+        eps = cp.array(2.1, dtype = distances.dtype)
         E = gsd.construct_query_vector_degree_array(distances, eps)
 
         start = timer()
@@ -204,7 +202,7 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
         #        [ 9,  5,  0,  0,  9,  5],
         #        [ 9,  6,  5,  5,  0,  6]]) ** 2
 
-        eps = np.sqrt(5.1)
+        eps = cp.array(cp.sqrt(5.1), dtype=distances.dtype)
 
         E = gsd.construct_query_vector_degree_array(distances, eps)
         V = gsd.process_query_vector_degree_array(E)
@@ -257,7 +255,7 @@ class TestAssembleAdjacencyList(unittest.TestCase):
             [0, 2, 1]
         ])
 
-        eps = 2
+        eps = cp.array(2, dtype = distances.dtype)
         distances = gsd.find_distances(X, A, B)
         E = gsd.construct_query_vector_degree_array(distances, eps)
         V = gsd.process_query_vector_degree_array(E)
@@ -272,7 +270,7 @@ class TestAssembleAdjacencyList(unittest.TestCase):
         X, A, B = create_mock_mnist_dataset()
 
         distances = gsd.find_distances(X, A, B)
-        eps = 2.1
+        eps = cp.array(2.1, dtype = distances.dtype)
 
         E = gsd.construct_query_vector_degree_array(distances, eps)
         V = gsd.process_query_vector_degree_array(E)
@@ -282,8 +280,6 @@ class TestAssembleAdjacencyList(unittest.TestCase):
         adj_list = gsd.assemble_adjacency_list(distances, E, A, B, V, eps)
 
         print(f"Test took {timer() - start} seconds")
-
-
 
 class TestContructClusterGraph(unittest.TestCase):
 
