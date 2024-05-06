@@ -290,11 +290,12 @@ def construct_query_vector_degree_array(distances, eps):
 
     Args:
         distances: The matrix containing the distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
-        eps: The epsilon value for DBSCAN
+        eps: The epsilon value for DBSCAN. Should be a scalar array with the same datatype as the distances array
     
     Returns:
         The degree array of the query vectors. Has shape (len(X), 1)
     """
+    assert distances.dtype == eps.dtype, "Distances and eps should have the same datatype"
     return cp.sum(distances < eps, axis=1)
     
 def process_query_vector_degree_array(E):
@@ -344,12 +345,15 @@ def assemble_adjacency_list(distances, E, A, B, V, eps, block_size=1024):
     adjacency_list = cp.full(shape=(int(E[-1] + V[-1]),), fill_value=-1)
     adjacency_list_d = cuda.as_cuda_array(adjacency_list)
     distances_d = cuda.as_cuda_array(distances)
+    eps = cp.array(eps, dtype=distances.dtype)
+    eps_d = cuda.as_cuda_array(eps)
     	
     A_d = cuda.as_cuda_array(A)
     B_d = cuda.as_cuda_array(B)
     V_d = cuda.as_cuda_array(V)
 
-    construct_adjacency_list_for_query_vector[len(E) // block_size, block_size](distances_d, adjacency_list_d, V_d, A_d, B_d, eps)
+    # TODO set eps as same dtype as distances for better runtime
+    construct_adjacency_list_for_query_vector[len(E) // block_size, block_size](distances_d, adjacency_list_d, V_d, A_d, B_d, eps_d)
     cuda.synchronize()
     
     return adjacency_list_d.copy_to_host()
@@ -386,7 +390,7 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
 
 
     for j in range(distances_d.shape[1]):
-        if distances_d[i][j] <  eps:
+        if distances_d[i][j] < eps[0]:
             A_col = j // m
             B_col = j % m
             if i == 0:

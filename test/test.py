@@ -70,7 +70,7 @@ class TestFindDistances(unittest.TestCase):
         k = A.shape[1] // 2
 
         start = timer()
-        distances = gsd.find_distances(X, A, B, alpha=1.18)
+        distances = gsd.find_distances(X, A, B)
         print(f"Test took {timer() - start} seconds")
 
         self.assertTrue(distances.shape == (n, 2*k*m))
@@ -94,43 +94,14 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
 
     def test_normally_mnist(self):
         X, A, B = create_mock_mnist_dataset()
-        n = X.shape[0]
 
-        # distances = gsd.find_distances(X, A, B)
-        # distances = distances.astype(cp.float64)
-        # print(distances.shape)
-        # print(distances.dtype)
-        #
-        # eps = 2.1
-        #
-        # start = timer()
-        #
-        # cp.sum(distances < 11.5, axis=1)
-        #
-        # print(timer() - start)
-
-
-        a = cp.random.randint(size=(70_000, 8000), low=0, high = 255) / 255
-        a = a.astype(cp.float16)
+        distances = gsd.find_distances(X, A, B)
+        eps = cp.array(2.1, dtype=cp.float16)
 
         start = timer()
+        E = gsd.construct_query_vector_degree_array(distances, eps) # Why does this take so long???
 
-        cp.sum(a < 0.5, axis=1)
-
-        print(timer() - start)
-
-        b = cp.random.random((70_000, 8000), dtype=cp.float64)
-
-        start = timer()
-
-        np.sum(b < 0.5, axis=1)
-
-        print(timer() - start)
-
-        # start = timer()
-        # E = gsd.construct_query_vector_degree_array(distances, eps) # Why does this take so long???
-        #
-        # print(f"Test took {timer() - start} seconds")
+        print(f"Test took {timer() - start} seconds")
 
         # self.assertTrue(E.shape == (n,))
 
@@ -138,8 +109,8 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
         X, A, B = create_mock_mnist_dataset(n=int(1e6))
         n = X.shape[0]
 
-        distances = gsd.find_distances(X, A, B, alpha = 100)
-        eps = 2.1
+        distances = gsd.find_distances(X, A, B, alpha = 1)
+        eps = cp.array(2.1, dtype=cp.float16)
 
         start = timer()
 
