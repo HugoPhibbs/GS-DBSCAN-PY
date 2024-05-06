@@ -183,7 +183,7 @@ def random_vecs(num, dim):
 
 ### Calculating distances between query and candidate vectors ###
 
-def find_distances(X, A, B):
+def find_distances(X, A, B, alpha=1.2):
     """
     Finds the distances between each query vector and their candidate vectors
 
@@ -195,7 +195,7 @@ def find_distances(X, A, B):
         X: dataset of vectors stored along the ROWS
         A: matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
         B: matrix of indices of the closest and furthest points to each random vector in D. Has shape (2*len(D), m)
-
+        alpha: a scaling factor to adjust the batch size. See docs for get_batch_size for more info
     Returns:
         A matrix of distances between the query and candidate vectors. Has shape (len(X), 2*k*m)
     """
@@ -205,24 +205,28 @@ def find_distances(X, A, B):
     m = B.shape[1]
 
     n = X.shape[0]
+    d = X.shape[1]
 
-    batch_size = get_batch_size(n, X.shape[1], k, m)
+    batch_size = get_batch_size(n, X.shape[1], k, m, alpha=alpha)
 
     distances = cp.empty(shape=(n, 2*k*m), dtype=cp.float16) # float32 causes a memory overload. float16 is fine (for eps 2DP)
+    # Z_batch = cp.empty(shape=(batch_size, 2*k, m, d), dtype=cp.float16)
+    # Z_batch_adj = cp.empty(shape=(batch_size, 2*k*m, d), dtype=cp.float16)
+    # Y_batch = cp.empty(shape=Z_batch_adj.shape, dtype=cp.float16)
 
     for i in range(0, n, batch_size):
         max_batch_idx = min(i+batch_size, X.shape[0])
 
         Z_batch = X[B[A[i:max_batch_idx]]]
-        Z_batch	 = Z_batch.reshape(Z_batch.shape[0], Z_batch.shape[1] * Z_batch.shape[2], Z_batch.shape[3])
+        Z_batch_adj = Z_batch.reshape(Z_batch.shape[0], Z_batch.shape[1] * Z_batch.shape[2], Z_batch.shape[3])
 
-        Y_batch = Z_batch - X[i:max_batch_idx, cp.newaxis, :]
+        Y_batch = Z_batch_adj - X[i:max_batch_idx, cp.newaxis, :]
 
-        distances[i:max_batch_idx] = cp.linalg.norm(Y_batch, axis=2) # using linalg.norm faster than cp.sum(Y**2, axis=
+        distances[i:max_batch_idx] = cp.linalg.norm(Y_batch, axis=2) # using linalg.norm faster than cp.sum(Y**2, axis=2)
     
     return distances
 
-def get_batch_size(n, d, k, m):
+def get_batch_size(n, d, k, m, alpha = 1.2):
     """
     Calculates the batch size. 
 
@@ -233,12 +237,11 @@ def get_batch_size(n, d, k, m):
         d: dimension of the query vectors
         k: k as described above
         m: m as described above
+        alpha: a scaling factor to adjust the batch size. Default is 1.2. Mainly here as a toggle to maximise batch size without overloading the memory
     """
 
     # For some reason, no matter what batch size you choose, after 200 iterations
-    # Of the above forloop, the performance falls of a cliff
-
-    alpha = 1.2 # Can be adjusted to make the batch size smaller or larger
+    # Of the above forloop, the performance falls of a cliff # Can be adjusted to make the batch size smaller or larger
 
     batch_size = int((n*d*2*k*m) // (1024**3) // alpha) # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
 

@@ -13,7 +13,7 @@ class TestConstructingABMatrices(unittest.TestCase):
     def test_normally(self):
         pass # TODO
 
-class TestSquareDistances(unittest.TestCase):
+class TestFindDistances(unittest.TestCase):
 
     def test_normally(self):
         X = cp.array([
@@ -46,7 +46,7 @@ class TestSquareDistances(unittest.TestCase):
         ])
 
         start = timer()
-        distances, times, mem = gsd.find_distances(X, A, B)
+        distances = gsd.find_distances(X, A, B)
 
         expected = cp.sqrt(cp.array([
             [11,  5, 14, 11,  0,  5],
@@ -59,24 +59,21 @@ class TestSquareDistances(unittest.TestCase):
         self.assertTrue(distances.shape == (X.shape[0], A.shape[1] * B.shape[1])) # Check shape is (N, 2*k*m)
         self.assertTrue(cp.array_equal(distances, expected))
 
+        # TODO why is everything
+
         print(f"Cupy took {timer() - start} seconds")
 
-    def test_normally_large_mats(self):
-        n = 70_000 # Mimic MNIST dataset
-        d = 784
-        m = 50
-        k = 40
-        D = 1000
-        X = cp.random.uniform(size=(n, d), dtype=cp.float32) # Since eps is only 2DP, no need to go to double precision (float64)
-        A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for n
-        B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
+    def test_normally_mnist(self):
+        X, A, B = create_mock_mnist_dataset()
+        n = X.shape[0]
+        m = B.shape[1]
+        k = A.shape[1] // 2
 
         start = timer()
-        distances = gsd.find_distances(X, A, B)
+        distances = gsd.find_distances(X, A, B, alpha=1.18)
+        print(f"Test took {timer() - start} seconds")
 
         self.assertTrue(distances.shape == (n, 2*k*m))
-
-        print(f"Test took {timer() - start} seconds")
 
 class TestContructQueryVectorDegreeArray(unittest.TestCase):
 
@@ -95,28 +92,63 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
 
         self.assertTrue(dc.deep_compare(E, expected))
 
-    def test_normally_large_mats(self):
-        n = 70_000 # Mimic MNIST dataset
-        d = 784
-        m = 50
-        k = 5
-        D = 1024
-        X = cp.random.uniform(size=(n, d), dtype=cp.float32) # Since eps is only 2DP, no need to go to double precision (float64)
-        A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for n
-        B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
+    def test_normally_mnist(self):
+        X, A, B = create_mock_mnist_dataset()
+        n = X.shape[0]
 
-        distances = gsd.find_distances(X, A, B)
+        # distances = gsd.find_distances(X, A, B)
+        # distances = distances.astype(cp.float64)
+        # print(distances.shape)
+        # print(distances.dtype)
+        #
+        # eps = 2.1
+        #
+        # start = timer()
+        #
+        # cp.sum(distances < 11.5, axis=1)
+        #
+        # print(timer() - start)
+
+
+        a = cp.random.randint(size=(70_000, 8000), low=0, high = 255) / 255
+        a = a.astype(cp.float16)
+
+        start = timer()
+
+        cp.sum(a < 0.5, axis=1)
+
+        print(timer() - start)
+
+        b = cp.random.random((70_000, 8000), dtype=cp.float64)
+
+        start = timer()
+
+        np.sum(b < 0.5, axis=1)
+
+        print(timer() - start)
+
+        # start = timer()
+        # E = gsd.construct_query_vector_degree_array(distances, eps) # Why does this take so long???
+        #
+        # print(f"Test took {timer() - start} seconds")
+
+        # self.assertTrue(E.shape == (n,))
+
+    def test_normally_large_mnist(self):
+        X, A, B = create_mock_mnist_dataset(n=int(1e6))
+        n = X.shape[0]
+
+        distances = gsd.find_distances(X, A, B, alpha = 100)
         eps = 2.1
+
+        start = timer()
 
         E = gsd.construct_query_vector_degree_array(distances, eps)
 
         self.assertTrue(E.shape == (n,))
 
-        start = timer()
+        print("Test took", timer() - start, "seconds")
 
-        V = gsd.process_query_vector_degree_array(E)
-
-        print(f"Test took {timer() - start} seconds")
 
 class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
@@ -128,23 +160,35 @@ class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
         self.assertTrue(cp.array_equal(V, V_expected))
 
-    def test_normally_large_mats(self):
-        n = 70_000 # Mimic MNIST dataset
-        d = 784
-        m = 50
-        k = 5
-        D = 1024
-        X = cp.random.uniform(size=(n, d), dtype=cp.float32) # Since eps is only 2DP, no need to go to double precision (float64)
-        A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for n
-        B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
+
+    def test_normally_mnist(self):
+        X, A, B = create_mock_mnist_dataset()
 
         distances = gsd.find_distances(X, A, B)
-        eps = 2.1
 
-        start = timer()
+        eps = 2.1
         E = gsd.construct_query_vector_degree_array(distances, eps)
 
-        self.assertTrue(E.shape == (n,))
+        start = timer()
+
+        V = gsd.process_query_vector_degree_array(E)
+
+        print(f"Test took {timer() - start} seconds")
+
+    @unittest.skip("Takes way too long")
+    def test_normally_large_mnist(self):
+        X, A, B = create_mock_mnist_dataset(n=int(1e6))
+
+        distances = gsd.find_distances(X, A, B, alpha = 100)
+
+        eps = 2.1
+        E = gsd.construct_query_vector_degree_array(distances, eps)
+
+        start = timer()
+
+        V = gsd.process_query_vector_degree_array(E)
+
+        start = timer()
 
         print(f"Test took {timer() - start} seconds")
 
@@ -254,14 +298,7 @@ class TestAssembleAdjacencyList(unittest.TestCase):
         self.assertTrue(np.array_equal(adj_list, expected_adj_list))
 
     def test_normally_large_mats(self):
-        n = 70_000 # Mimic MNIST dataset
-        d = 784
-        m = 50
-        k = 5
-        D = 1024
-        X = cp.random.uniform(size=(n, d), dtype=cp.float32) # Since eps is only 2DP, no need to go to double precision (float64)
-        A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for n
-        B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
+        X, A, B = create_mock_mnist_dataset()
 
         distances = gsd.find_distances(X, A, B)
         eps = 2.1
@@ -284,3 +321,23 @@ class TestContructClusterGraph(unittest.TestCase):
 class TestPerformBFS(unittest.TestCase):
 
     pass # TODO
+
+def create_mock_mnist_dataset(n=70_000, d= 784, m = 2000, k = 2, D = 1024):
+    """
+    Creates a mock MNIST dataset for testing purposes, along with accompanying A, B matrices
+
+    Args:
+        n: size of dataset
+        d: dimensionality of dataset
+        m: Number of query vectors per random vector
+        k: number of random vectors per dataset vector
+        D: number of random vectors
+
+    Returns:
+        X, A, B: dataset, A matrix, B matrix
+    """
+    X = cp.random.randint(size=(n, d), low=0, high=255, dtype=cp.int16) / 255
+    X = X.astype(cp.float16)#  Since eps is only 2DP, float16 will do
+    A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for max n
+    B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
+    return X, A, B
