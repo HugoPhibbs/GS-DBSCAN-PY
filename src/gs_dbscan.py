@@ -290,13 +290,13 @@ def construct_query_vector_degree_array(distances, eps):
 
     Args:
         distances: The matrix containing the distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
-        eps: The epsilon value for DBSCAN. Should be a scalar cupy array with the same datatype as the distances array
+        eps: The epsilon value for DBSCAN. Should be a 1D cupy array with the same datatype as the distances array. Has shape (1,)
     
     Returns:
         The degree array of the query vectors. Has shape (len(X), 1)
     """
     assert distances.dtype == eps.dtype, "Distances and eps should have the same datatype"
-    return cp.sum(distances < eps, axis=1)
+    return cp.sum(distances < eps[0], axis=1)
     
 def process_query_vector_degree_array(E):
     """
@@ -333,7 +333,7 @@ def assemble_adjacency_list(distances, E, A, B, V, eps, block_size=1024):
         A: CuPy array. The matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
         B: CuPy array. The matrix of indices of the closest and furthest points to each random vector in D. Has shape (2*len(D), m)
         V: CuPy array. The processed degree array of the query vectors (as per the G-DBSCAN algorithm). Has shape (len(X), 1)
-        eps: The epsilon value for DBSCAN.
+        eps: The epsilon value for DBSCAN. 0 dimensional cupy array
         k: k as described above
         m: m as described above
         n: number of query vectors
@@ -345,28 +345,29 @@ def assemble_adjacency_list(distances, E, A, B, V, eps, block_size=1024):
     adjacency_list = cp.full(shape=(int(E[-1] + V[-1]),), fill_value=-1)
     adjacency_list_d = cuda.as_cuda_array(adjacency_list)
     distances_d = cuda.as_cuda_array(distances)
-    eps = cp.array(eps, dtype=distances.dtype)
     eps_d = cuda.as_cuda_array(eps)
-    	
+
     A_d = cuda.as_cuda_array(A)
     B_d = cuda.as_cuda_array(B)
     V_d = cuda.as_cuda_array(V)
 
+    num_blocks = max(len(E) // block_size, 1)
+    block_size = min(block_size, len(E))
+
     # TODO set eps as same dtype as distances for better runtime
-    construct_adjacency_list_for_query_vector[len(E) // block_size, block_size](distances_d, adjacency_list_d, V_d, A_d, B_d, eps_d)
+    construct_adjacency_list_for_query_vector[num_blocks, block_size](distances_d, adjacency_list_d, V_d, A_d, B_d, eps_d)
     cuda.synchronize()
-    
+
     return adjacency_list_d.copy_to_host()
     
 
 @cuda.jit
 def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, A_d, B_d, eps):
-    #TODO add A and B to above signature
     """
     Constructs a segment of the adjacency list for a single query vector
 
-    Thread is responsible for a single query vector. The block size should be the maximum - around 1024. Assumes that a query vector doesn't have more than 1024 vectors in its epsilon neighbourhood.
-    
+    Thread is responsible for a single query vector. The block size (number of threads) should be the maximum - around 1024. Assumes that a query vector doesn't have more than 1024 vectors in its epsilon neighbourhood.
+
     Modifies G in place
     
     Args:
@@ -393,8 +394,6 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
         if distances_d[i][j] < eps[0]:
             A_col = j // m
             B_col = j % m
-            if i == 0:
-                print(j, A_col, B_col)
             B_row = A_d[i][A_col]
             neighbourhood_vector_idx = B_d[B_row][B_col]
 

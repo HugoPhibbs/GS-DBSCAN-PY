@@ -8,10 +8,12 @@ from timeit import default_timer as timer
 import cupy as cp
 import matplotlib.pyplot as plt
 
+
 class TestConstructingABMatrices(unittest.TestCase):
 
     def test_normally(self):
-        pass # TODO
+        pass  # TODO
+
 
 class TestFindDistances(unittest.TestCase):
 
@@ -23,7 +25,7 @@ class TestFindDistances(unittest.TestCase):
             [3, 0, 1],
             [0, 0, 1]
         ])
-       
+
         A = cp.array([
             [0, 3],
             [2, 5],
@@ -49,14 +51,14 @@ class TestFindDistances(unittest.TestCase):
         distances = gsd.find_distances(X, A, B)
 
         expected = cp.sqrt(cp.array([
-            [11,  5, 14, 11,  0,  5],
-            [ 9,  0, 11,  0, 14, 11],
-            [ 5,  0,  5,  5,  8, 14],
-            [ 9,  5,  0,  0,  9,  5],
-            [ 9,  6,  5,  5,  0,  6]
+            [11, 5, 14, 11, 0, 5],
+            [9, 0, 11, 0, 14, 11],
+            [5, 0, 5, 5, 8, 14],
+            [9, 5, 0, 0, 9, 5],
+            [9, 6, 5, 5, 0, 6]
         ], dtype=cp.float16))
-        
-        self.assertTrue(distances.shape == (X.shape[0], A.shape[1] * B.shape[1])) # Check shape is (N, 2*k*m)
+
+        self.assertTrue(distances.shape == (X.shape[0], A.shape[1] * B.shape[1]))  # Check shape is (N, 2*k*m)
         self.assertTrue(cp.array_equal(distances, expected))
 
         print(f"Cupy took {timer() - start} seconds")
@@ -71,7 +73,8 @@ class TestFindDistances(unittest.TestCase):
         distances = gsd.find_distances(X, A, B)
         print(f"Test took {timer() - start} seconds")
 
-        self.assertTrue(distances.shape == (n, 2*k*m))
+        self.assertTrue(distances.shape == (n, 2 * k * m))
+
 
 class TestContructQueryVectorDegreeArray(unittest.TestCase):
 
@@ -82,7 +85,7 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
             [1, 8, 9, 11],
             [15, 2, 6, 7]
         ])
-        eps = cp.array(2.1, dtype = distances.dtype)
+        eps = cp.array([2.1], dtype=distances.dtype)
 
         E = gsd.construct_query_vector_degree_array(distances, eps)
 
@@ -94,11 +97,10 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
         X, A, B = create_mock_mnist_dataset()
 
         distances = gsd.find_distances(X, A, B)
-        eps = cp.array(2.1, dtype=cp.float16)
+        eps = cp.array([11.5], dtype=distances.dtype)
 
         start = timer()
-        E = gsd.construct_query_vector_degree_array(distances, eps) # Why does this take so long???
-
+        E = gsd.construct_query_vector_degree_array(distances, eps)  # Why does this take so long???, spooky
         print(f"Test took {timer() - start} seconds")
 
         # self.assertTrue(E.shape == (n,))
@@ -107,8 +109,8 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
         X, A, B = create_mock_mnist_dataset(n=int(1e6))
         n = X.shape[0]
 
-        distances = gsd.find_distances(X, A, B, alpha = 1)
-        eps = cp.array(2.1, dtype=cp.float16)
+        distances = gsd.find_distances(X, A, B, alpha=1)
+        eps = cp.array([2.1], dtype=cp.float16)
 
         start = timer()
 
@@ -122,20 +124,18 @@ class TestContructQueryVectorDegreeArray(unittest.TestCase):
 class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
     def test_normally(self):
-
         E = cp.array([3, 4, 1, 1], dtype=cp.int32)
         V_expected = cp.array([0, 3, 7, 8])
         V = gsd.process_query_vector_degree_array(E)
 
         self.assertTrue(cp.array_equal(V, V_expected))
 
-
     def test_normally_mnist(self):
         X, A, B = create_mock_mnist_dataset()
 
         distances = gsd.find_distances(X, A, B)
 
-        eps = cp.array(2.1, dtype = distances.dtype)
+        eps = cp.array([11.5], dtype=distances.dtype)
         E = gsd.construct_query_vector_degree_array(distances, eps)
 
         start = timer()
@@ -148,9 +148,9 @@ class TestProcessQueryVectorDegreeArray(unittest.TestCase):
     def test_normally_large_mnist(self):
         X, A, B = create_mock_mnist_dataset(n=int(1e6))
 
-        distances = gsd.find_distances(X, A, B, alpha = 100)
+        distances = gsd.find_distances(X, A, B, alpha=100)
 
-        eps = cp.array(2.1, dtype = distances.dtype)
+        eps = cp.array([2.1], dtype=distances.dtype)
         E = gsd.construct_query_vector_degree_array(distances, eps)
 
         start = timer()
@@ -161,10 +161,10 @@ class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
         print(f"Test took {timer() - start} seconds")
 
+
 class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
 
     def test_normally(self):
-
         X = cp.array([
             [0, 1, 3],
             [1, 2, 0],
@@ -172,7 +172,7 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
             [3, 0, 1],
             [0, 0, 1]
         ])
-       
+
         A = np.array([
             [0, 3],
             [2, 5],
@@ -202,7 +202,7 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
         #        [ 9,  5,  0,  0,  9,  5],
         #        [ 9,  6,  5,  5,  0,  6]]) ** 2
 
-        eps = cp.array(cp.sqrt(5.1), dtype=distances.dtype)
+        eps = cp.array([cp.sqrt(5.1)], dtype=distances.dtype)
 
         E = gsd.construct_query_vector_degree_array(distances, eps)
         V = gsd.process_query_vector_degree_array(E)
@@ -211,7 +211,7 @@ class TestConstructAdjacencyListForQueryVector(unittest.TestCase):
         A_d = cuda.to_device(A)
         B_d = cuda.to_device(B)
         V_d = cuda.to_device(V)
-    
+
         # Figured out adj myself by using B[A]
         expected_adj_list = np.array([2, 0, 2, 1, 1, 0, 2, 3, 0, 2, 3, 3, 2, 0, 0, 4])
         adjacency_list = cp.full(shape=(int(E[-1] + V[-1])), fill_value=-1, dtype=cp.int32)
@@ -255,14 +255,15 @@ class TestAssembleAdjacencyList(unittest.TestCase):
             [0, 2, 1]
         ])
 
-        eps = cp.array(2, dtype = distances.dtype)
         distances = gsd.find_distances(X, A, B)
+        distances = distances.astype(cp.float16)
+
+        eps = cp.array([2], dtype=distances.dtype)  # Use same dtype as distances
         E = gsd.construct_query_vector_degree_array(distances, eps)
         V = gsd.process_query_vector_degree_array(E)
 
+        expected_adj_list = np.array([0, 1, 1, 2, 3, 3, 4])
         adj_list = gsd.assemble_adjacency_list(distances, E, A, B, V, eps)
-
-        expected_adj_list = np.array([2, 0, 2, 1, 1, 0, 2, 3, 0, 2, 3, 3, 2, 0, 0, 4])
 
         self.assertTrue(np.array_equal(adj_list, expected_adj_list))
 
@@ -270,26 +271,27 @@ class TestAssembleAdjacencyList(unittest.TestCase):
         X, A, B = create_mock_mnist_dataset()
 
         distances = gsd.find_distances(X, A, B)
-        eps = cp.array(2.1, dtype = distances.dtype)
+        eps = cp.array([11.5], dtype=distances.dtype)
 
         E = gsd.construct_query_vector_degree_array(distances, eps)
         V = gsd.process_query_vector_degree_array(E)
 
         start = timer()
 
-        adj_list = gsd.assemble_adjacency_list(distances, E, A, B, V, eps)
+        adj_list = gsd.assemble_adjacency_list(distances, E, A, B, V, eps, block_size = 64) # Weird how its slower than the CPU?
 
         print(f"Test took {timer() - start} seconds")
 
-class TestContructClusterGraph(unittest.TestCase):
 
-    pass # TODO
+class TestContructClusterGraph(unittest.TestCase):
+    pass  # TODO
+
 
 class TestPerformBFS(unittest.TestCase):
+    pass  # TODO
 
-    pass # TODO
 
-def create_mock_mnist_dataset(n=70_000, d= 784, m = 2000, k = 2, D = 1024):
+def create_mock_mnist_dataset(n=70_000, d=784, m=2000, k=2, D=1024):
     """
     Creates a mock MNIST dataset for testing purposes, along with accompanying A, B matrices
 
@@ -304,7 +306,10 @@ def create_mock_mnist_dataset(n=70_000, d= 784, m = 2000, k = 2, D = 1024):
         X, A, B: dataset, A matrix, B matrix
     """
     X = cp.random.randint(size=(n, d), low=0, high=255, dtype=cp.int16) / 255
-    X = X.astype(cp.float16)#  Since eps is only 2DP, float16 will do
-    A = cp.random.randint(size=(n, 2*k), low=0, high=2*(D-1), dtype=cp.uint32) # uint32 goes up to 4 billion, more than enough for max n
-    B = cp.random.randint(size=(2*D, m), low=0, high=n-1, dtype=cp.uint32)
+    X = X.astype(cp.float16)  #  Since eps is only 2DP, float16 will do
+    A = cp.random.randint(size=(n, 2 * k), low=0, high=2 * (D - 1),
+                          dtype=cp.uint32)  # uint32 goes up to 4 billion, more than enough for max n
+    B = cp.random.randint(size=(2 * D, m), low=0, high=n - 1, dtype=cp.uint32)
     return X, A, B
+
+
