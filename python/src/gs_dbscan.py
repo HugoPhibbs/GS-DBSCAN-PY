@@ -1,10 +1,9 @@
 from numba import cuda
 import numpy as np
-from src.limited_priority_queue import LimitedPriorityQueue
-import ThrustRTC as trtc
+from python.src.limited_priority_queue import LimitedPriorityQueue
 import cupy as cp
 import networkx as nx
-from timeit import default_timer as timer
+
 
 def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     """
@@ -199,8 +198,6 @@ def find_distances(X, A, B, alpha=1.2):
     Returns:
         A matrix of distances between the query and candidate vectors. Has shape (len(X), 2*k*m)
     """
-    start = timer()
-
     k = A.shape[1] // 2
     m = B.shape[1]
 

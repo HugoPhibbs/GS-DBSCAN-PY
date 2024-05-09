@@ -1,18 +1,21 @@
-import src.gs_dbscan as gsd
+import python.src.gs_dbscan as gsd
 import unittest
 import numpy as np
 from numba import cuda
 import deepcomparer as dc
-import ThrustRTC as trtc
 from timeit import default_timer as timer
 import cupy as cp
-import matplotlib.pyplot as plt
 
 
 class TestConstructingABMatrices(unittest.TestCase):
 
     def test_normally(self):
         pass  # TODO
+
+
+    def test_normally_mist(self):
+        X = create_mock_mnist_dataset()
+
 
 
 class TestFindDistances(unittest.TestCase):
@@ -64,7 +67,7 @@ class TestFindDistances(unittest.TestCase):
         print(f"Cupy took {timer() - start} seconds")
 
     def test_normally_mnist(self):
-        X, A, B = create_mock_mnist_dataset()
+        X, A, B = create_mock_mnist_dataset(k=5, m=50)
         n = X.shape[0]
         m = B.shape[1]
         k = A.shape[1] // 2
@@ -280,7 +283,7 @@ class TestAssembleAdjacencyList(unittest.TestCase):
 
         adj_list = gsd.assemble_adjacency_list(distances, E, A, B, V, eps, block_size = 64) # Weird how its slower than the CPU?
 
-        print(f"Test took {timer() - start} seconds")
+        print(f"Test took {timer() - start} seconds") # Takes less than a second
 
 
 class TestContructClusterGraph(unittest.TestCase):
@@ -290,6 +293,14 @@ class TestContructClusterGraph(unittest.TestCase):
 class TestPerformBFS(unittest.TestCase):
     pass  # TODO
 
+def create_mock_A_B_matrices(n = 70_000, k=2, m=2000, D= 1024):
+    A = cp.random.randint(size=(n, 2 * k), low=0, high=2 * (D - 1),
+                          dtype=cp.uint32)  # uint32 goes up to 4 billion, more than enough for max n
+    B = cp.random.randint(size=(2 * D, m), low=0, high=n - 1, dtype=cp.uint32)
+    return A, B
+
+def create_mock_random_vectors_set(D = 1024, d=784):
+    return cp.random.random(size = (D, d))
 
 def create_mock_mnist_dataset(n=70_000, d=784, m=2000, k=2, D=1024):
     """
