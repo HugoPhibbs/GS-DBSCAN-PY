@@ -1,0 +1,36 @@
+\begin{thebibliography}{1}
+
+\bibitem{DBSCAN}
+Ricardo Campello, Peer Kröger, Joerg Sander, and Arthur Zimek.
+\newblock Density‐based clustering.
+\newblock {\em Wiley Interdisciplinary Reviews: Data Mining and Knowledge
+  Discovery}, 10, 10 2019.
+
+\bibitem{DB_SCAN_1996}
+Martin Ester, Hans-Peter Kriegel, J\"{o}rg Sander, and Xiaowei Xu.
+\newblock A density-based algorithm for discovering clusters in large spatial
+  databases with noise.
+\newblock In {\em Proceedings of the Second International Conference on
+  Knowledge Discovery and Data Mining}, KDD'96, page 226–231. AAAI Press,
+  1996.
+
+\bibitem{nvidia_cuda}
+NVIDIA.
+\newblock Cuda toolkit, 2023.
+
+\bibitem{CUDARefresher2023}
+{NVIDIA Developer}.
+\newblock Cuda refresher: The cuda programming model, 2023.
+\newblock Accessed: 2024-06-19.
+
+\bibitem{Owens2008}
+John~D. Owens, Mike Houston, David Luebke, Simon Green, John~E. Stone, and
+  James~C. Phillips.
+\newblock Gpu computing.
+\newblock {\em Proceedings of the IEEE}, 96(5):879--899, 2008.
+
+\bibitem{S_DBSCAN}
+Haochuan Xu and Ninh Pham.
+\newblock Scalable density-based clustering with random projections, 2024.
+
+\end{thebibliography}
