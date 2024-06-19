@@ -4,6 +4,7 @@ from src.limited_priority_queue import LimitedPriorityQueue
 import ThrustRTC as trtc
 import cupy as cp
 import networkx as nx
+from timeit import default_timer as timer
 
 def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     """
@@ -24,7 +25,7 @@ def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     
     A, B = preprocessing(X, D)
 
-    distances = find_squared_distances(X, A, B)
+    distances = find_distances(X, A, B)
 
     graph_adjacency_list = construct_cluster_graph(distances, eps, k, m)
 
@@ -99,7 +100,7 @@ def construct_A_B_matrices(X, Y, k, m):
 
     A has a shape of (len(X), 2 * k). The i'th row of A stores the indices of the 2*k closest and furthest random vectors to the i'th point in X. Closest in first k slots and furthest in the last k slots.
 
-    B has a shape of (len(D), 2 * m). The j'th row of B stores the indices of the 2*m closest and furthest points to the j'th random vector in D. Closest in first m slots and furthest in the last m slots.
+    B has a shape of (2*len(D), m). The (2j)'th row of B stores the indices of vectors closest to the j'th random vector. And the (2j+1)'th row of B stores the indices of the vectors furthest from the j'th random vector
 
     Args: 
         X: point dataset, a matrix of points stored along the ROWS
@@ -120,8 +121,8 @@ def construct_A_B_matrices(X, Y, k, m):
 
     for j in range(len(A)):
         top_k, bottom_k = top_closest_and_furthest_indices(product[j], k)
-        A[2*j, :k] = top_k
-        A[2*j+1, k:] = bottom_k
+        A[j, :k] = 2*top_k
+        A[j, k:] = 2*bottom_k + 1
 
     for j in range(len(B)):
         top_m, bottom_m = top_closest_and_furthest_indices(product[:, j], m)
@@ -139,7 +140,7 @@ def top_closest_and_furthest_indices(vector, n):
         k: k as mentioned   
 
     Returns:
-        A tuple of two lists. The first list is the top k closest indices and the second list is the top m furthest indices
+        A tuple of two np arrays. The first array is the top k closest indices and the second array is the top m furthest indices
     """
     top_heap = LimitedPriorityQueue(n)
     bottom_heap = LimitedPriorityQueue(n, reverse=True)
@@ -147,7 +148,7 @@ def top_closest_and_furthest_indices(vector, n):
         entry = vector[i]
         top_heap.push(i, entry)
         bottom_heap.push(i, entry)
-    return top_heap.heap_items(), bottom_heap.heap_items()
+    return np.array(top_heap.heap_items()), np.array(bottom_heap.heap_items())
 
 def dataset_random_projections(X, Y):
     """
@@ -182,9 +183,9 @@ def random_vecs(num, dim):
 
 ### Calculating distances between query and candidate vectors ###
 
-def find_squared_distances(X, A, B):
+def find_distances(X, A, B, alpha=1.2):
     """
-    Finds the squared distances between each query vector and their candidate vectors
+    Finds the distances between each query vector and their candidate vectors
 
     I'm curious to see if this is faster than the Numba CUDA implementation
     
@@ -193,18 +194,66 @@ def find_squared_distances(X, A, B):
     Args:
         X: dataset of vectors stored along the ROWS
         A: matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
-        B: matrix of indices of the closest and furthest points to each random vector in D. Has shape (len(D), 2*m)
-
+        B: matrix of indices of the closest and furthest points to each random vector in D. Has shape (2*len(D), m)
+        alpha: a scaling factor to adjust the batch size. See docs for get_batch_size for more info
     Returns:
-        A matrix of squared distances between the query and candidate vectors. Has shape (len(X), 2*k*m)
+        A matrix of distances between the query and candidate vectors. Has shape (len(X), 2*k*m)
     """
-    Z = X[B[A]]
+    start = timer()
 
-    Z  = Z.reshape(X.shape[0], Z.shape[1] * Z.shape[2], Z.shape[3])
+    k = A.shape[1] // 2
+    m = B.shape[1]
 
-    Y = Z - X[:, np.newaxis, :]
+    n = X.shape[0]
+    d = X.shape[1]
 
-    return cp.sum(Y**2, axis=2)
+    batch_size = get_batch_size(n, X.shape[1], k, m, alpha=alpha)
+
+    distances = cp.empty(shape=(n, 2*k*m), dtype=cp.float16) # float32 causes a memory overload. float16 is fine (for eps 2DP)
+    # Z_batch = cp.empty(shape=(batch_size, 2*k, m, d), dtype=cp.float16)
+    # Z_batch_adj = cp.empty(shape=(batch_size, 2*k*m, d), dtype=cp.float16)
+    # Y_batch = cp.empty(shape=Z_batch_adj.shape, dtype=cp.float16)
+
+    for i in range(0, n, batch_size):
+        max_batch_idx = min(i+batch_size, X.shape[0])
+
+        Z_batch = X[B[A[i:max_batch_idx]]]
+        Z_batch_adj = Z_batch.reshape(Z_batch.shape[0], Z_batch.shape[1] * Z_batch.shape[2], Z_batch.shape[3])
+
+        Y_batch = Z_batch_adj - X[i:max_batch_idx, cp.newaxis, :]
+
+        distances[i:max_batch_idx] = cp.linalg.norm(Y_batch, axis=2) # using linalg.norm faster than cp.sum(Y**2, axis=2)
+    
+    return distances
+
+def get_batch_size(n, d, k, m, alpha = 1.2):
+    """
+    Calculates the batch size. 
+
+    Batch size is best a divisor of n, to maximise GPU utilisation (its better when batches are all the same size and the last one isn't a special case)
+
+    Args:
+        n: number of query vectors
+        d: dimension of the query vectors
+        k: k as described above
+        m: m as described above
+        alpha: a scaling factor to adjust the batch size. Default is 1.2. Mainly here as a toggle to maximise batch size without overloading the memory
+    """
+
+    # For some reason, no matter what batch size you choose, after 200 iterations
+    # Of the above forloop, the performance falls of a cliff # Can be adjusted to make the batch size smaller or larger
+
+    batch_size = int((n*d*2*k*m) // (1024**3) // alpha) # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
+
+    if batch_size == 0:
+        return n
+
+    for divisor in range(batch_size - 1, 0, -1):
+        if n % divisor == 0:
+            batch_size = divisor
+            break
+
+    return batch_size
 
 
 ### Constructing the cluster graph ###
@@ -214,7 +263,7 @@ def construct_cluster_graph(distances, eps, k, m):
     Constructs the cluster graph as per the G-DBSCAN algorithm
 
     Args:
-        distances: The matrix containing the squared distances between the query and candidate vectors. Stored on GPU memory via CUDA
+        distances: The matrix containing the distances between the query and candidate vectors. Stored on GPU memory via CUDA
         eps: The epsilon value. Used to determine if the candidate vectors are within epsilon range of the query vectors
         k: k as described above
         m: m as described above
@@ -224,31 +273,30 @@ def construct_cluster_graph(distances, eps, k, m):
         The adjacency list as per the G-DBSCAN algorithm
         And the processed degree array of the query vectors. Stored on GPU memory (within the thrust library)
     """
-    eps_squared = eps ** 2
 
-    E = construct_query_vector_degree_array(distances, eps_squared)
+    E = construct_query_vector_degree_array(distances, eps)
 
     V = process_query_vector_degree_array(E) 
 
-    adjacency_list = assemble_adjacency_list(distances, E, V, eps_squared)
+    adjacency_list = assemble_adjacency_list(distances, E, V, eps)
 
     return adjacency_list, V
 
-def construct_query_vector_degree_array(distances, eps_squared):
+def construct_query_vector_degree_array(distances, eps):
     """
     Finds the degree of the query vectors as per the G-DBSCAN algorithm.
 
     This is used in later steps for the construction of the cluster graph
 
     Args:
-        distances: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
-        eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
+        distances: The matrix containing the distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
+        eps: The epsilon value for DBSCAN. Should be a 1D cupy array with the same datatype as the distances array. Has shape (1,)
     
     Returns:
         The degree array of the query vectors. Has shape (len(X), 1)
-    """ 
-    indices_mask = distances < eps_squared
-    return cp.sum(indices_mask, axis=1)
+    """
+    assert distances.dtype == eps.dtype, "Distances and eps should have the same datatype"
+    return cp.sum(distances < eps[0], axis=1)
     
 def process_query_vector_degree_array(E):
     """
@@ -273,17 +321,19 @@ def process_query_vector_degree_array(E):
     #trtc.Exclusive_Scan(E_d, V_d)
     #return cp.array(V_d.to_host())
 
-def assemble_adjacency_list(distances, E, V, eps_squared, block_size=1024):
+def assemble_adjacency_list(distances, E, A, B, V, eps, block_size=1024):
     """
     Assembles the adjacency list as per the G-DBSCAN algorithm
 
     Some parameters are saved onto cuda device memory. Just to avoid copying them back to CPU memory for processing
 
     Args:
-        distances: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
+        distances: The matrix containing the distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m)
         E: CuPy array. The degree array of the query vectors. Has shape (len(X), 1)
+        A: CuPy array. The matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k)
+        B: CuPy array. The matrix of indices of the closest and furthest points to each random vector in D. Has shape (2*len(D), m)
         V: CuPy array. The processed degree array of the query vectors (as per the G-DBSCAN algorithm). Has shape (len(X), 1)
-        eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
+        eps: The epsilon value for DBSCAN. 0 dimensional cupy array
         k: k as described above
         m: m as described above
         n: number of query vectors
@@ -292,33 +342,41 @@ def assemble_adjacency_list(distances, E, V, eps_squared, block_size=1024):
         An adjacency list as per the G-DBSCAN algorithm. Stored on CPU memory. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
 
     """
+    adjacency_list = cp.full(shape=(int(E[-1] + V[-1]),), fill_value=-1)
+    adjacency_list_d = cuda.as_cuda_array(adjacency_list)
+    distances_d = cuda.as_cuda_array(distances)
+    eps_d = cuda.as_cuda_array(eps)
 
-    adjacency_list = np.full(shape=(E[-1] + V[-1],), fill_value=-1)
-    adjacency_list_d = cuda.to_device(adjacency_list)
-    distances_d = cp.asarray(distances)
+    A_d = cuda.as_cuda_array(A)
+    B_d = cuda.as_cuda_array(B)
+    V_d = cuda.as_cuda_array(V)
 
-    V_d = cuda.to_device(V)
+    num_blocks = max(len(E) // block_size, 1)
+    block_size = min(block_size, len(E))
 
-    construct_adjacency_list_for_query_vector[len(E), block_size](distances_d, adjacency_list_d, V_d, eps_squared)
-    
+    # TODO set eps as same dtype as distances for better runtime
+    construct_adjacency_list_for_query_vector[num_blocks, block_size](distances_d, adjacency_list_d, V_d, A_d, B_d, eps_d)
+    cuda.synchronize()
+
     return adjacency_list_d.copy_to_host()
     
 
 @cuda.jit
-def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, A, B, eps_squared):
-    #TODO add A and B to above signature
+def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, A_d, B_d, eps):
     """
     Constructs a segment of the adjacency list for a single query vector
 
-    Thread is responsible for a single query vector. The block size should be the maximum - around 1024. Assumes that a query vector doesn't have more than 1024 vectors in its epsilon neighbourhood.
-    
+    Thread is responsible for a single query vector. The block size (number of threads) should be the maximum - around 1024. Assumes that a query vector doesn't have more than 1024 vectors in its epsilon neighbourhood.
+
     Modifies G in place
     
     Args:
-        distances_d: The matrix containing the squared distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
-        G: The adjacency list to store the neighbourhood vectors of the query vectors. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
+        distances_d: The matrix containing the distances between the query and candidate vectors. Has shape (dataset_size, 2*k*m). Essentially the distances between query and candidate vectors as stored in the I matrix.
+        adjacency_list_d: The adjacency list to store the neighbourhood vectors of the query vectors. Has shape (E[-1] + V[-1],). The indices of the candidate vectors that are within epsilon range of the query vectors are stored in this list. The indices are stored in the same order as the query vectors. The first E[0] entries are the indices of the closest candidate vectors to the query vectors. The next E[1] entries are the indices of the next closest candidate vectors to the query vectors and so on
+        A_d: The matrix of indices of the closest and furthest random vectors to each point in X. Has shape (len(X), 2*k). Stored on GPU memory
+        B_d: The matrix of indices of the closest and furthest points to each random vector in D. Has shape (2*len(D), m). Stored on GPU memory
         V_d: The processed degree array of the query vectors. Has shape (len(X), 1). Stored on GPU memory
-        eps_squared: The square of the epsilon value. Take epsilon squared to avoid the square root operation of the euclidean distance. I.e. we are using for x, y possitive, if x^2 < y then x < sqrt(y)
+        eps: The epsilon value
     """
     thread_idx = cuda.threadIdx.x
     block_idx = cuda.blockIdx.x
@@ -326,9 +384,20 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
 
     i = block_idx * block_size + thread_idx
     curr_index = V_d[i]
+    m = B_d.shape[1]
+
+    # TODO can make this more efficient if E[i] == 0 then this loop can be skipped altogether
+    # Can also have a break condition if you have already added E[i] neighbourhood vectors
+
+
     for j in range(distances_d.shape[1]):
-        if distances_d[i][j] < eps_squared:
-            adjacency_list_d[curr_index] = j #TODO fix me
+        if distances_d[i][j] < eps[0]:
+            A_col = j // m
+            B_col = j % m
+            B_row = A_d[i][A_col]
+            neighbourhood_vector_idx = B_d[B_row][B_col]
+
+            adjacency_list_d[curr_index] = neighbourhood_vector_idx 
             curr_index += 1
 
 ### Performing BFS to find connected components ###
