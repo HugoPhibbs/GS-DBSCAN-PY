@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2024.4.25)  19 JUN 2024 16:11
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2024.4.25)  20 JUN 2024 16:55
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -655,6 +655,11 @@ Package: array 2023/10/16 v2.5g Tabular extension package (FMi)
 \backup@length=\skip59
 \ar@cellbox=\box69
 )
+(C:\Users\hugop\AppData\Local\Programs\MiKTeX\tex/latex/cite\cite.sty
+LaTeX Info: Redefining \cite on input line 302.
+LaTeX Info: Redefining \nocite on input line 332.
+Package: cite 2015/02/27  v 5.5
+)
 (C:\Users\hugop\AppData\Local\Programs\MiKTeX\tex/latex/algorithmicx\algpseudoc
 ode.sty
 Package: algpseudocode 
@@ -685,20 +690,20 @@ File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
 ) (main.aux)
 \openout1 = `main.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 18.
-LaTeX Font Info:    ... okay on input line 18.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 18.
-LaTeX Font Info:    ... okay on input line 18.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 18.
-LaTeX Font Info:    ... okay on input line 18.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 18.
-LaTeX Font Info:    ... okay on input line 18.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 18.
-LaTeX Font Info:    ... okay on input line 18.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 18.
-LaTeX Font Info:    ... okay on input line 18.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 18.
-LaTeX Font Info:    ... okay on input line 18.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 30.
+LaTeX Font Info:    ... okay on input line 30.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 30.
+LaTeX Font Info:    ... okay on input line 30.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 30.
+LaTeX Font Info:    ... okay on input line 30.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 30.
+LaTeX Font Info:    ... okay on input line 30.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 30.
+LaTeX Font Info:    ... okay on input line 30.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 30.
+LaTeX Font Info:    ... okay on input line 30.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 30.
+LaTeX Font Info:    ... okay on input line 30.
 
 -- Lines per column: 58 (exact).
 
@@ -731,28 +736,62 @@ File: epstopdf-sys.cfg 2021/03/18 v2.0 Configuration of epstopdf for MiKTeX
 Package todonotes Warning: The length marginparwidth is less than 2cm and will 
 most likely cause issues with the appearance of inserted todonotes. The issue c
 an be solved by adding a line like \setlength {\marginparwidth }{2cm} prior to 
-loading the todonotes package. on input line 18.
+loading the todonotes package. on input line 30.
 
-LaTeX Font Info:    Trying to load font information for U+msa on input line 36.
+
+LaTeX Warning: Citation `campello_density-based_2020' on page 1 undefined on in
+put line 39.
+
+
+LaTeX Warning: Citation `ohadi_sw_dbscan_2020' on page 1 undefined on input lin
+e 45.
+
+
+LaTeX Warning: Citation `huang_grit-dbscan_2022' on page 1 undefined on input l
+ine 45.
+
+
+LaTeX Warning: Citation `gholizadeh_k-dbscan_2021' on page 1 undefined on input
+ line 47.
+
+
+LaTeX Warning: Citation `andrade_g-dbscan_2013' on page 1 undefined on input li
+ne 49.
+
+
+LaTeX Warning: Citation `poudel_cuda-dclust_2021' on page 1 undefined on input 
+line 49.
+
+
+LaTeX Warning: Citation `thapa_memory-efficient_2010' on page 1 undefined on in
+put line 49.
+
+
+LaTeX Warning: Citation `poudel_cuda-dclust_2021' on page 1 undefined on input 
+line 49.
+
+
+LaTeX Warning: Citation `andrade_g-dbscan_2013' on page 1 undefined on input li
+ne 49.
+
+
+LaTeX Warning: Citation `mustafa_experimental_2019' on page 1 undefined on inpu
+t line 49.
+
+LaTeX Font Info:    Trying to load font information for U+msa on input line 56.
 
 (C:\Users\hugop\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 36.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 56.
 
 
 (C:\Users\hugop\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
-Underfull \hbox (badness 5203) in paragraph at lines 50--51
+Underfull \hbox (badness 5203) in paragraph at lines 70--71
 []\OT1/ptm/b/n/10 Out-put: \OT1/ptm/m/n/10 Set con-tain-ing core points and the
 ir $\OML/cmm/m/it/10 ^^O$\OT1/ptm/m/n/10 -
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 77--78
-[]\OT1/ptm/b/n/10 In-puts\OT1/ptm/m/n/10 : $\OT1/cmr/bx/n/10 X\OML/cmm/m/it/10 
-; ^^O; minPts$ \OT1/ptm/m/n/10 the set $\OML/cmm/m/it/10 C \OT1/cmr/m/n/10 =
  []
 
 [1{C:/Users/hugop/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{C:/Users/hu
@@ -760,65 +799,84 @@ gop/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/base/8r.enc}
 
 
 ]
-<db-scan-alg3.png, id=26, 561.59813pt x 188.95593pt>
-File: db-scan-alg3.png Graphic file (type png)
-<use db-scan-alg3.png>
-Package pdftex.def Info: db-scan-alg3.png  used on input line 123.
-(pdftex.def)             Requested size: 176.39923pt x 59.35132pt.
-<db-scan-alg4.png, id=28, 554.07pt x 441.14813pt>
-File: db-scan-alg4.png Graphic file (type png)
-<use db-scan-alg4.png>
-Package pdftex.def Info: db-scan-alg4.png  used on input line 131.
-(pdftex.def)             Requested size: 176.39923pt x 140.4433pt.
-<db-scan-alg5.png, id=29, 552.56438pt x 205.5178pt>
+Underfull \hbox (badness 10000) in paragraph at lines 97--98
+[]\OT1/ptm/b/n/10 In-puts\OT1/ptm/m/n/10 : $\OT1/cmr/bx/n/10 X\OML/cmm/m/it/10 
+; ^^O; minPts$ \OT1/ptm/m/n/10 the set $\OML/cmm/m/it/10 C \OT1/cmr/m/n/10 =
+ []
+
+<db-scan-alg5.png, id=18, 552.56438pt x 205.5178pt>
 File: db-scan-alg5.png Graphic file (type png)
 <use db-scan-alg5.png>
-Package pdftex.def Info: db-scan-alg5.png  used on input line 139.
+Package pdftex.def Info: db-scan-alg5.png  used on input line 202.
 (pdftex.def)             Requested size: 176.39923pt x 65.6071pt.
-<nvidia-cuda-model.png, id=30, 536.75531pt x 376.40625pt>
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+[2]
+<nvidia-cuda-model.png, id=33, 536.75531pt x 376.40625pt>
 File: nvidia-cuda-model.png Graphic file (type png)
 <use nvidia-cuda-model.png>
-Package pdftex.def Info: nvidia-cuda-model.png  used on input line 158.
+Package pdftex.def Info: nvidia-cuda-model.png  used on input line 221.
 (pdftex.def)             Requested size: 176.39923pt x 123.69753pt.
- (main.bbl)
-[2 <./db-scan-alg3.png> <./db-scan-alg4.png> <./db-scan-alg5.png> <./nvidia-cud
-a-model.png>] (main.aux)
+ (main.bbl
+
+! LaTeX Error: Command \k unavailable in encoding OT1.
+
+See the LaTeX manual or LaTeX Companion for explanation.
+Type  H <return>  for immediate help.
+ ...                                              
+                                                  
+l.18 Heinrich Jiang, Jennifer Jang, and Jakub Łą
+                                                  cki.
+Your command was ignored.
+Type  I <command> <return>  to replace it with another command,
+or  <return>  to continue without it.
+
+) [3
+
+ <./db-scan-alg5.png> <./nvidia-cuda-model.png>] (main.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-04>
  ***********
+
+
+LaTeX Warning: There were undefined references.
+
  ) 
 Here is how much of TeX's memory you used:
- 15779 strings out of 474486
- 317577 string characters out of 5743755
- 1948542 words of memory out of 5000000
- 37758 multiletter control sequences out of 15000+600000
- 601993 words of font info for 121 fonts, out of 8000000 for 9000
+ 15883 strings out of 474486
+ 319052 string characters out of 5743755
+ 1961542 words of memory out of 5000000
+ 37862 multiletter control sequences out of 15000+600000
+ 600248 words of font info for 116 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 99i,13n,101p,676b,858s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 99i,13n,101p,1002b,856s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/
 cmbx10.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/public/ams
-fonts/cm/cmbx8.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/pu
-blic/amsfonts/cmextra/cmex8.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/f
-onts/type1/public/amsfonts/cm/cmmi10.pfb><C:/Users/hugop/AppData/Local/Programs
-/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi6.pfb><C:/Users/hugop/AppData/Local/
-Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi7.pfb><C:/Users/hugop/AppDat
-a/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi8.pfb><C:/Users/hugo
-p/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr10.pfb><C:/Us
-ers/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr7.pfb
-><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/c
-mr8.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfon
-ts/cm/cmsy10.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/publ
-ic/amsfonts/cm/cmsy8.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/ty
-pe1/public/amsfonts/cm/cmti10.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX
-/fonts/type1/public/amsfonts/symbols/msbm10.pfb><C:/Users/hugop/AppData/Local/P
-rograms/MiKTeX/fonts/type1/urw/times/utmb8a.pfb><C:/Users/hugop/AppData/Local/P
-rograms/MiKTeX/fonts/type1/urw/times/utmbi8a.pfb><C:/Users/hugop/AppData/Local/
-Programs/MiKTeX/fonts/type1/urw/times/utmr8a.pfb><C:/Users/hugop/AppData/Local/
-Programs/MiKTeX/fonts/type1/urw/times/utmri8a.pfb>
-Output written on main.pdf (2 pages, 471076 bytes).
+fonts/cm/cmbx7.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/pu
+blic/amsfonts/cm/cmbx8.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/
+type1/public/amsfonts/cm/cmex10.pfb><C:/Users/hugop/AppData/Local/Programs/MiKT
+eX/fonts/type1/public/amsfonts/cmextra/cmex8.pfb><C:/Users/hugop/AppData/Local/
+Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi10.pfb><C:/Users/hugop/AppDa
+ta/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi6.pfb><C:/Users/hug
+op/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi7.pfb><C:/U
+sers/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi8.p
+fb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm
+/cmr10.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/public/ams
+fonts/cm/cmr7.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/type1/pub
+lic/amsfonts/cm/cmr8.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX/fonts/ty
+pe1/public/amsfonts/cm/cmsy10.pfb><C:/Users/hugop/AppData/Local/Programs/MiKTeX
+/fonts/type1/public/amsfonts/cm/cmsy7.pfb><C:/Users/hugop/AppData/Local/Program
+s/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy8.pfb><C:/Users/hugop/AppData/Local
+/Programs/MiKTeX/fonts/type1/public/amsfonts/symbols/msbm10.pfb><C:/Users/hugop
+/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmb8a.pfb><C:/Users/hugop
+/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmbi8a.pfb><C:/Users/hugo
+p/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmr8a.pfb><C:/Users/hugo
+p/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmri8a.pfb>
+Output written on main.pdf (3 pages, 331288 bytes).
 PDF statistics:
- 112 PDF objects out of 1000 (max. 8388607)
+ 121 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 500000)
- 33 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 23 words of extra memory for PDF output out of 10000 (max. 10000000)
 

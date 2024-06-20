@@ -14,6 +14,11 @@ Martin Ester, Hans-Peter Kriegel, J\"{o}rg Sander, and Xiaowei Xu.
   Knowledge Discovery and Data Mining}, KDD'96, page 226–231. AAAI Press,
   1996.
 
+\bibitem{jiang_faster_2020}
+Heinrich Jiang, Jennifer Jang, and Jakub Łącki.
+\newblock Faster {DBSCAN} via subsampled similarity queries.
+\newblock \_eprint: 2006.06743.
+
 \bibitem{nvidia_cuda}
 NVIDIA.
 \newblock Cuda toolkit, 2023.
@@ -28,6 +33,12 @@ John~D. Owens, Mike Houston, David Luebke, Simon Green, John~E. Stone, and
   James~C. Phillips.
 \newblock Gpu computing.
 \newblock {\em Proceedings of the IEEE}, 96(5):879--899, 2008.
+
+\bibitem{schneider_scalable_2017}
+Johannes Schneider and Michalis Vlachos.
+\newblock Scalable density-based clustering with quality guarantees using
+  random projections.
+\newblock 31.
 
 \bibitem{S_DBSCAN}
 Haochuan Xu and Ninh Pham.

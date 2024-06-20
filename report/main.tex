@@ -8,12 +8,24 @@
 \usepackage{algorithm}
 \usepackage{booktabs}
 \usepackage{array}
+\usepackage{cite}
 \usepackage{algpseudocode}
 \title{CUDA-sDBSCAN: GPU Accelerated Density Based Clustering With Random Projections}
 \author{   
     Hugo Phibbs and Ninh Pham % TODO add complete affiliations, emails etc.
 }
 \date{March 2024} % TODO change for publication
+
+% Marcos
+\newcommand{\bX}{\mathbf{X}}
+\newcommand{\bY}{\mathbf{Y}}
+\newcommand{\br}{\mathbf{r}}
+\newcommand{\bq}{\mathbf{q}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\eps}{\epsilon}
+\newcommand{\Bq}{B_{\eps}(\bq)}
+\newcommand{\Bx}{\widetilde{B}_{\eps}(\bx)}
+\newcommand{\Bqt}{\widetilde{B}_{\eps}(\bq)}
 
 \begin{document}
 
@@ -23,21 +35,29 @@
     
 \end{abstract}
 
-\section{Introduction}
-DBSCAN \cite{DB_SCAN_1996} is clustering based algorithm with many applications in areas such as... % TODO Find some references for this
+\section{Introduction}	
+DBSCAN \cite{DB_SCAN_1996} is density based clustering based algorithm with many applications in areas such as machine learning, data mining and biology \cite{campello_density-based_2020}. It's applicability has stood the test of time - appearing in a plethora of data analysis tools such as ELKI, scikit-learn, R and Weka.
 
 \section{Related Work}
+
+There have been a myriad of research in the past to adapt DBSCAN for large scale datasets. These attempts can be broadly classified into the usage of data indexing, approximating clusters, specialised hardware and distributed computing.
+
+Work to scale up DBSCAN with data indexing \cite{ohadi_sw_dbscan_2020, huang_grit-dbscan_2022} \comment{}{why are these refs not showing up?} can be effective at increasing the \comment{scalability of DBSCAN}{reference for this}. Although they have shown to be successful for low dimensional datasets, they are ill-suited to large scale applications because of run-off effects with the complexity of effectively indexing high dimensional data. 
+
+Research to approximate DBSCAN \cite{S_DBSCAN, schneider_scalable_2017, jiang_faster_2020} has also proved effective at scaling DBSCAN. Sampling approaches such as K-DBSCAN \cite{gholizadeh_k-dbscan_2021} and sngDBSCAN \cite{jiang_faster_2020} \comment{are potentially efficient, except they can rely on the a wise choice of sampling parameters - which can be difficult.}{feel like more can be said here}
+
+Due to the parallelizable nature of DBSCAN, other approaches \cite{andrade_g-dbscan_2013, poudel_cuda-dclust_2021, thapa_memory-efficient_2010} have focused on using a GPU to accelerate DBSCAN. CUDA-DClust+ \cite{poudel_cuda-dclust_2021} utilizes a tree indexing structure as-well as a GPU to accelerate computation. While it is excellent for applications with small scale data-sets, it is limited to this use case due to complexity of creating an indexing tree over large dimensions. Andrade et al's G-DBSCAN \cite{andrade_g-dbscan_2013} focuses on using graph principles along with a GPU to scale DBSCAN. However, due to it's usage of an graph adjacency list, G-DBSCAN can prove to be severely memory intensive \cite{mustafa_experimental_2019}. \comment{There is also little experimental data to support the usage of G-DBSCAN dimensions greater than 2. }{honestly, not too sure about this! - its a claim made in CUDA-DClust+ paper - end of p40}
 
 \section{Preliminaries}
 
 \subsection{DBSCAN}
 \comment{}{Perhaps comment that the below is a naive implementation of DBSCAN?}
-In a nutshell, DBSCAN \cite{DBSCAN} is an algorithm to cluster related data points together based on a given distance metric. The algorithm is composed of two key processes: the identification of core points and the formation of clusters.
-For the sake of explanation consider a set of data points $\mathbf{X} = \{\mathbf{x}_1, \mathbf{x}_2, \dots, \mathbf{x}_n\}$, where $\textit{dim}(\mathbf{x}_i) = d$. The identification of core points can be completed as follows:
+In a nutshell, DBSCAN \cite{DBSCAN} is an algorithm to cluster related data points together based on a given distance metric. \comment{The algorithm is composed of two key processes: the identification of core points and the formation of clusters.}{This is a little premature to mention 'core points' when they haven't even been defined yet}
+For the sake of explanation consider a set of data points $\bX = \{\bx_1, \bx_2, \dots, \bx_n\}$, where $\textit{dim}(\bx_i) = d$. The identification of core points can be completed as follows:
 
 \begin{enumerate}[] 
-	\item For each data point $q \in \mathbf{X}$ find the distance  $\textit{dist}(\mathbf{x}, \mathbf{q})$  to all other data points $\mathbf{x} \in \mathbf{X}$. If $\textit{dist}(\mathbf{x}, \mathbf{q})$ is less than the maximum clustering distance $\epsilon$, add $\mathbf{x}$ to the neighbourhood set of $\mathbf{q}$, denoted by $\textit{B}_\epsilon(\mathbf{q})$ 
-	\item For each $\mathbf{q} \in \mathbf{X}$, if $|\textit{B}_\epsilon(\mathbf{q})|$ is greater than or equal to a threshold $minPts$, the point $\mathbf{q}$ is a \textit{core point}. Add the tuple $(\mathbf{q}, \textit{B}_\epsilon(\mathbf{q}))$ to the core point set $C$. 
+	\item For each data point $q \in \bX$ find the distance  $\textit{dist}(\bx, \bq)$  to all other data points $\bx \in \bX$. If $\textit{dist}(\bx, \bq)$ is less than the maximum clustering distance $\eps$, add $\bx$ to the neighbourhood set of $\bq$, denoted by $\Bq$ 
+	\item For each $\bq \in \bX$, if $|\Bq|$ is greater than or equal to a threshold $minPts$, the point $\bq$ is a \textit{core point}. Add the tuple $(\bq, \Bq)$ to the core point set $C$. 
 \end{enumerate}
 
 The pseudo code for the identification of key points is shown in algorithm \ref{alg:dbscan-core-points}.
@@ -46,39 +66,39 @@ The pseudo code for the identification of key points is shown in algorithm \ref{
 	\caption{DBSCAN, classification of core points}
 	\label{alg:dbscan-core-points}
 	\begin{algorithmic}[1]
-		\State \textbf{Input:} Data points $\mathbf{X} = \{\mathbf{x}_1, \mathbf{x}_2, \dots, \mathbf{x}_n\}$, $\epsilon$, $minPts$
-		\State \textbf{Output:} Set containing core points and their $\epsilon$-neighbourhoods
+		\State \textbf{Input:} Data points $\bX = \{\bx_1, \bx_2, \dots, \bx_n\}$, $\eps$, $minPts$
+		\State \textbf{Output:} Set containing core points and their $\eps$-neighbourhoods
 		
 		\State Initialize $C = \emptyset$
 	
-		\For{each data point $\mathbf{q} \in \mathbf{X}$}
-		\State Initialize $\textit{B}_\epsilon(\mathbf{q}) = \emptyset$
-		\For{each data point $\mathbf{x} \in \mathbf{X}$}
-		\State Compute $\textit{dist}(\mathbf{x}, \mathbf{q})$
-		\If{$\textit{dist}(\mathbf{x}, \mathbf{q}) < \epsilon$}
-		\State Add $\mathbf{x}$ to $\textit{B}_\epsilon(\mathbf{q})$
+		\For{each data point $\bq \in \bX$}
+		\State Initialize $\Bq = \emptyset$
+		\For{each data point $\bx \in \bX$}
+		\State Compute $\textit{dist}(\bx, \bq)$
+		\If{$\textit{dist}(\bx, \bq) < \eps$}
+		\State Add $\bx$ to $\Bq$
 		\EndIf
 		\EndFor
-		\If{$|\textit{B}_\epsilon(\mathbf{q})| \geq minPts$}
-		\State Add $(\mathbf{q}, \textit{B}_\epsilon(\mathbf{q}))$ to $C$
+		\If{$|\Bq| \geq minPts$}
+		\State Add $(\bq, \Bq)$ to $C$
 		\EndIf
 		\EndFor
 		
 	\end{algorithmic}
 \end{algorithm}
 
-Once core points are identified, the data set can be partitioned into clusters. A cluster is formed by considering all points that are within \textit{direct} or \textit{transitive} $\epsilon$ distance from each other. Given the identification of core points and their neighbourhoods, clusters can be formed using algorithm \ref{alg:dbscan}. The result of the DBSCAN algorithm is a graph $G$, where each connected component is a cluster of the data set $\mathbf{X}$
+Once core points are identified, the data set can be partitioned into clusters. A cluster is formed by considering all points that are within \textit{direct} or \textit{transitive} $\eps$ distance from each other. Given the identification of core points and their neighbourhoods, clusters can be formed using algorithm \ref{alg:dbscan}. The result of the DBSCAN algorithm is a graph $G$, where each connected component is a cluster of the data set $\bX$
 
 % TODO ok that I literally copy pasted this from sDBSCAN source?
 \begin{algorithm}[H]
-	\caption{DBSCAN}
+	\caption{DBSCAN, forming clusters}
 	\label{alg:dbscan}
 	\begin{algorithmic}[1] % [1] for line numbers
-		\State \textbf{Inputs}: $\mathbf{X}, \epsilon, minPts$ the set $C = \{ (\mathbf{q}, \mathit{B}_{\epsilon}(\mathbf{q})) \, | \, \mathbf{q} \text{ is core} \}$
+		\State \textbf{Inputs}: $\bX, \eps, minPts$ the set $C = \{ (\bq, \Bq) \, | \, \bq \text{ is core} \}$
 		\State $G \gets$ initialize empty graph
-		\For {each $\mathbf{q} \in C$}
-		\State Add an edge (and possibly a vertex or vertices) in $G$ from $\mathbf{q}$ to all \textit{core} points in $\mathit{B}_{\epsilon}(\mathbf{q})$
-		\State Add an edge (and possibly a vertex) in $G$ from $\mathbf{q}$ to \textit{non-core} points $\mathbf{x} \in \mathit{B}_{\epsilon}(\mathbf{q})$ if $\mathbf{x}$ is not connected
+		\For {each $\bq \in C$}
+		\State Add an edge (and possibly a vertex or vertices) in $G$ from $\bq$ to all \textit{core} points in $\Bq$
+		\State Add an edge (and possibly a vertex) in $G$ from $\bq$ to \textit{non-core} points $\bx \in \Bq$ if $\bx$ is not connected
 		\EndFor
 		\State \textbf{return} connected components of $G$
 	\end{algorithmic}
@@ -88,9 +108,9 @@ Once core points are identified, the data set can be partitioned into clusters. 
 
 \subsection{sDBSCAN}
 \comment{}{Comment here about the scalability of DBSCAN, and how this is addressed with sDBSCAN.}
-sDBSCAN\cite{S_DBSCAN} is an implementation of DBSCAN based on using random projections to rapidly speed up the $\epsilon$-neighbourhood search for each particular data point.
+sDBSCAN\cite{S_DBSCAN} is an implementation of DBSCAN based on using random projections to rapidly speed up the $\eps$-neighbourhood search for each particular data point.
 
-Besides the given DBSCAN inputs of $\mathbf{X}$, $\epsilon$, and $minPts$, sDBSCAN adds a few more parameters - these are described in table \ref{tab:definitions}.
+Besides the given DBSCAN inputs of $\bX$, $\eps$, and $minPts$, sDBSCAN adds a few more parameters - these are described in table \ref{tab:definitions}.
 
 \begin{table}[h]
 	\centering
@@ -98,9 +118,9 @@ Besides the given DBSCAN inputs of $\mathbf{X}$, $\epsilon$, and $minPts$, sDBSC
 		\hline
 		\textbf{Parameter} & \textbf{Description} \\ 
 		\hline
-		$\mathbf{S}$ & A set of $D$ random vectors with the same dimension as points in $\mathbf{X}$. Each random vector has coordinates sampled from the standard normal distribution. Formally: $\mathbf{S} = \left\{ \mathbf{r}^i \mid \mathbf{r}^i \in \mathbb{R}^d, \ \mathbf{r}^i \sim \mathcal{N}(0,1), \ i \in [D] \right\}$ \\ \hline
-		$k$ & The number of closest/furthest random vectors from $\mathbf{S}$ to store for each query point $\mathbf{q} \in \mathbf{X}$ \\ \hline
-		$m$ & The number of closest/furthest query points from $\mathbf{X}$ to store for each random vector $\mathbf{r} \in \mathbf{S}$ \\ \hline
+		$\mathbf{Y}$ & A set of $D$ random vectors with the same dimension as points in $\bX$. Each random vector has coordinates sampled from the standard normal distribution. Formally: $\mathbf{Y} = \left\{ \br^i \mid \br^i \in \mathbb{R}^d, \ \br^i \sim \mathcal{N}(0,1), \ i \in [D] \right\}$ \\ \hline
+		$k$ & The number of closest/furthest random vectors from $\bY$ to store for each query point $\bq \in \bX$ \\ \hline
+		$m$ & The number of closest/furthest query points from $\bX$ to store for each random vector $\br \in \bY$ \\ \hline
 	\end{tabular}
 	\caption{Definitions and descriptions of sDBSCAN's parameters}
 	\label{tab:definitions}
@@ -109,37 +129,73 @@ Besides the given DBSCAN inputs of $\mathbf{X}$, $\epsilon$, and $minPts$, sDBSC
 The sDBSCAN algorithm can be summarised into a few key steps: pre-processing, identification of key points, and formation of clusters. The pre-processing steps are as follows:
 
 \begin{enumerate}[]
-	\item For each random vector $\mathbf{r}_i \in \mathbf{S}$, calculate it's projection to each query point $\mathbf{q} \in \mathbf{X}$. 
-	\item For each query point $\mathbf{q} \in \mathbf{X}$, using the projections store its top $k$ closest and furthest random vectors.
-	\item For each random vector $\mathbf{r}_i \in \mathbf{S}$, using the projections, store its top $m$ closest and furthest data set points.
+	\item For each random vector $\br_i \in \bY$, calculate it's projection to each query point $\bq \in \bX$. 
+	\item For each query point $\bq \in \bX$, using the projections store its top $k$ closest and furthest random vectors.
+	\item For each random vector $\br_i \in \bY$, using the projections, store its top $m$ closest and furthest data set points.
 \end{enumerate}
 
-From here, the preprocessing steps are essentially used to guide an informed search for the $\epsilon$ neighbourhood of each data point $\x \in \mathbf{X}$
+From here, the preprocessing steps are essentially used to guide an informed search for the $\eps$ neighbourhood of each data point $\bx \in \bX$
 
 %TODO finish me!
 
 \begin{enumerate}
-	\item Use the random projections to form an approximate $\epsilon$-neighbourhood set $\tilde{B}_\epsilon(\mathbf{q})$ for each data-set point $\mathbf{q}$.
-	\item Perform the standard DBSCAN clustering step \ref{alg:dbscan} on the set of estimated core points and their neighbourhoods. $\tilde{B}_\epsilon(\mathbf{q})$ sets for $\mathbf{q}$ identified as core.
+	\item Use the random projections to form an approximate $\eps$-neighbourhood set $\Bqt$ for each data-set point $\bq$.
+	\item Perform the standard DBSCAN clustering step \ref{alg:dbscan} on the set of estimated core points and their neighbourhoods. $\Bqt$ sets for $\bq$ identified as core.
 \end{enumerate}
 
 The complete pseudocode is shown in algorithm \ref{fig:db-scan-alg5}. % TODO fix for when screenshot is changed
 
-\begin{figure}[h]
-	\centering
-	\includegraphics[width=0.7\linewidth]{db-scan-alg3}
-	\caption{}
-	\label{fig:db-scan-alg3}
-	% TODO Replace Screenshot with actual code
-\end{figure}
+\begin{algorithm}[!t]
+	\caption{Preprocessing}
+	\label{alg:preprocessing}	
+	\begin{algorithmic} [1]
+		\State {\bf Inputs}: $\bX \subset S^{d-1}$, $D$ random vectors $\br_i$, $k, m = O(minPts)$		
+		%
+		\State \textbf{for} each $\bq \in \bX$, compute and store top-$k$ \textcolor{blue}{nearest} and top-$k$ \textcolor{blue}{farthest} vectors $\br_i \in \mathbf{Y}$ to $\bq$.
+		\State \textbf{for} each random vector $\br_i \in \mathbf{Y}$, compute and store top-$m$ \textcolor{blue}{nearest} and top-$m$ \textcolor{blue}{farthest} points to $\br_i$.		
+		%
+		\normalsize		
+	\end{algorithmic}
+\end{algorithm}
 
-\begin{figure}[h]
-	\centering
-	\includegraphics[width=0.7\linewidth]{db-scan-alg4}
-	\caption{}
-	\label{fig:db-scan-alg4}
-	% TODO Replace Screenshot with actual code
-\end{figure}
+\begin{algorithm}[!t]
+	\caption{Finding core points and their neighborhoods}
+	\label{alg:neighborhood} 									
+	\begin{algorithmic} [1]
+		\State {\bf Inputs}: $\bX \subset S^{d-1}$, $\mathbf{Y}$, $k, \eps, m = O(minPts)$		
+		%
+		\State Initialize an empty set $\br_{\bq}$ for each $\bq \in \bX$
+		% \State{{\color{red}\texttt{\#pragma omp parallel}}} \Comment{Multi-threading directive}
+		\For{\text{each} $\bq \in \bX$}
+		% \State {\br_{\bq} \gets \emptyset}
+		\For{\text{each} $\br_i$ from top-$k$ \textcolor{blue}{nearest} random vectors of $\bq$}
+		\For{\text{each} $\bx$ from top-$m$ \textcolor{blue}{nearest} points of $\br_i$}
+		\If{$dist(\bx, \bq) \leq \eps$}
+		\State Insert $\bx$ into $\widetilde{B}_\eps(\bq)$ and insert $\bq$ into $\Bx$
+		\EndIf                        
+		\EndFor                    
+		\EndFor
+		\For{\text{each} $\br_i $ from top-$k$ \textcolor{blue}{farthest} random vectors of $\bq$}
+		\For{\text{each} $\bx$ from top-$m$ \textcolor{blue}{farthest} points of $\br_i$}
+		\If{$dist(\bx, \bq) \leq \eps$}
+		\State Insert $\bx$ into $\Bqt$ and insert $\bq$ into $\Bx$
+		\EndIf                        
+		\EndFor                    
+		\EndFor
+		\EndFor
+		%
+		% \State{{\color{red}\texttt{\#pragma omp parallel}}} \Comment{Multi-threading directive}
+		\For{\text{each} $\bq \in \bX$}
+		\If{$|\Bqt| \geq minPts$}
+		\State Identify $\bq$ as the core point
+		\State Store $\Bqt$ as an approximate result of $\Bq$
+		\EndIf
+		\EndFor            
+		%
+		\normalsize		
+	\end{algorithmic}
+\end{algorithm}
+
 
 \begin{figure}[h]
 	\centering
@@ -177,6 +233,6 @@ Threads are executed in groups called \textit{warps}. To maximise occupancy of a
 \section{Conclusion}
 
 \bibliographystyle{plain}
-\bibliography{refs}
+\bibliography{refs, refs-related}`
 
 \end{document}
