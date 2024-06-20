@@ -26,6 +26,7 @@
 \newcommand{\Bq}{B_{\eps}(\bq)}
 \newcommand{\Bx}{\widetilde{B}_{\eps}(\bx)}
 \newcommand{\Bqt}{\widetilde{B}_{\eps}(\bq)}
+\newcommand{\Sd} {\mathcal{S}^{d-1}}
 
 \begin{document}
 
@@ -149,7 +150,7 @@ The complete pseudocode is shown in algorithm \ref{fig:db-scan-alg5}. % TODO fix
 	\caption{Preprocessing}
 	\label{alg:preprocessing}	
 	\begin{algorithmic} [1]
-		\State {\bf Inputs}: $\bX \subset S^{d-1}$, $D$ random vectors $\br_i$, $k, m = O(minPts)$		
+		\State {\bf Inputs}: $\bX \subset \Sd$, $D$ random vectors $\br_i$, $k, m = O(minPts)$		
 		%
 		\State \textbf{for} each $\bq \in \bX$, compute and store top-$k$ \textcolor{blue}{nearest} and top-$k$ \textcolor{blue}{farthest} vectors $\br_i \in \mathbf{Y}$ to $\bq$.
 		\State \textbf{for} each random vector $\br_i \in \mathbf{Y}$, compute and store top-$m$ \textcolor{blue}{nearest} and top-$m$ \textcolor{blue}{farthest} points to $\br_i$.		
@@ -162,7 +163,7 @@ The complete pseudocode is shown in algorithm \ref{fig:db-scan-alg5}. % TODO fix
 	\caption{Finding core points and their neighborhoods}
 	\label{alg:neighborhood} 									
 	\begin{algorithmic} [1]
-		\State {\bf Inputs}: $\bX \subset S^{d-1}$, $\mathbf{Y}$, $k, \eps, m = O(minPts)$		
+		\State {\bf Inputs}: $\bX \subset \Sd$, $\mathbf{Y}$, $k$, $\eps$, $m = O(minPts)$		
 		%
 		\State Initialize an empty set $\br_{\bq}$ for each $\bq \in \bX$
 		% \State{{\color{red}\texttt{\#pragma omp parallel}}} \Comment{Multi-threading directive}
@@ -197,14 +198,19 @@ The complete pseudocode is shown in algorithm \ref{fig:db-scan-alg5}. % TODO fix
 \end{algorithm}
 
 
-\begin{figure}[h]
-	\centering
-	\includegraphics[width=0.7\linewidth]{db-scan-alg5}
-	\caption{}
-	\label{fig:db-scan-alg5}
-	% TODO Replace Screenshot with actual code
-\end{figure}
-
+\begin{algorithm}[!t]
+	\caption{sDBSCAN}
+	\label{alg:sdbscan} 									
+	\begin{algorithmic} [1]
+		\State {\bf Inputs}: $\bX \subset \Sd$, $\bY$, $\eps$, $minPts$	
+		%
+		\State {Call Algorithm~\ref{alg:preprocessing} for preprocessing with $m = O(minPts)$}
+		\State {Call Algorithm~\ref{alg:neighborhood} to find the set \newline $C = \{ (\bq, \Bqt) \, | \, \bq \text{ is identified as core} \}$}
+		\State {Call DBSCAN (Alg.~\ref{alg:dbscan}) given the output $C$ from Algorithm~\ref{alg:neighborhood}}
+		%
+		\normalsize		
+	\end{algorithmic}
+\end{algorithm}
 
 \subsection{GPU Programming with CUDA}
 
@@ -233,6 +239,6 @@ Threads are executed in groups called \textit{warps}. To maximise occupancy of a
 \section{Conclusion}
 
 \bibliographystyle{plain}
-\bibliography{refs, refs-related}`
+\bibliography{refs, refs-related}
 
 \end{document}
