@@ -1,5 +1,5 @@
 from test import create_mock_mnist_dataset
-import python.src.gs_dbscan as gsd
+import src.gs_dbscan as gsd
 from timeit import default_timer as timer
 import cupy as cp
 
