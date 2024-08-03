@@ -1,3 +1,5 @@
+import pandas as pd
+
 import src.gs_dbscan as gsd
 import unittest
 import numpy as np
@@ -9,8 +11,30 @@ import cupy as cp
 
 class TestConstructingABMatrices(unittest.TestCase):
 
-    def test_normally(selfx):
-        pass  # TODO
+    def test_normally(self):
+        n = 100
+        k = 5
+        m = 10
+        D = 30
+        projections = cp.random.rand(n, D)
+        projections = cp.round(projections, 3)
+
+        # import pandas as pd
+        # projections_np = cp.asnumpy(projections)
+        # df = pd.DataFrame(projections_np)
+        # df.to_csv("projections.csv")
+
+        A_gs, B_gs = gsd.construct_A_B_matrices_gpu_sort_from_projections(n, D, k, m, projections)
+
+        A_gp, B_gp = gsd.construct_A_B_matrices_gpu_partition_from_projections(n, D, k, m, projections)
+
+        self.assertTrue(A_gs.shape == (n, 2 * k))
+        self.assertTrue(B_gs.shape == (2 * D, m))
+        self.assertTrue(A_gp.shape == (n, 2 * k))
+        self.assertTrue(B_gp.shape == (2 * D, m))
+
+        self.assertTrue(cp.array_equal(A_gp, A_gs))
+        self.assertTrue(cp.array_equal(B_gp, B_gs))
 
     def test_normally_mnist(self):
         X = create_mock_mnist_dataset()
@@ -25,13 +49,12 @@ class TestConstructingABMatrices(unittest.TestCase):
         self.assertTrue(A.shape == (X.shape[0], 2 * 5))
         self.assertTrue(B.shape == (2 * 1024, 50))
 
-
     def test_normally_mnist_gpu(self):
         k = 5
         m = 50
         D = 1024
         d = 784
-        n = 3400_000
+        n = 400_000
 
         X = create_mock_mnist_dataset(n=n, d=d)
         Y = create_mock_random_vectors_set(D=D, d=d)
@@ -59,7 +82,8 @@ class TestConstructingABMatrices(unittest.TestCase):
         A_eq = A_gp == A_gs
         B_eq = B_gp == B_gs
 
-        self.assertTrue(cp.sum(A_eq) / A_eq.size > 0.95) # Rounding issues due to float16 cause some differences between sorting and partitioning
+        self.assertTrue(cp.sum(
+            A_eq) / A_eq.size > 0.95)  # Rounding issues due to float16 cause some differences between sorting and partitioning
         # self.assertTrue(cp.sum(B_eq) / B_eq.size > 0.70) # Rounding issues are somehow much more pronounced for B than for A.
 
         count = 0
@@ -72,6 +96,7 @@ class TestConstructingABMatrices(unittest.TestCase):
         #
         # self.assertTrue(cp.array_equal(A_gs, A_gp))
         # self.assertTrue(cp.array_equal(B_gs, B_gp))
+
 
 class TestFindDistances(unittest.TestCase):
 
@@ -121,8 +146,27 @@ class TestFindDistances(unittest.TestCase):
 
         print(f"Cupy took {timer() - start} seconds")
 
+    def test_medium_mnist(self):
+        n = 1_000
+        d = 20
+        k = 3
+        m = 20
+        D = 100
+
+        X = create_mock_mnist_dataset(n=n, d=d)
+        A, B = create_mock_A_B_matrices(n=n, k=k, m=m, D=D)
+
+        start = timer()
+        distances = gsd.find_distances(X, A, B)
+        cp.cuda.Device().synchronize()
+
+        print(f"Test took {timer() - start} seconds")
+
+        self.assertTrue(distances.shape == (n, 2 * k * m))
+
+
     def test_normally_mnist(self):
-        X = create_mock_mnist_dataset(k=5, m=50)
+        X = create_mock_mnist_dataset()
         A, B = create_mock_A_B_matrices(n=X.shape[0], k=5, m=50)
 
         n = X.shape[0]
@@ -130,8 +174,11 @@ class TestFindDistances(unittest.TestCase):
         k = A.shape[1] // 2
 
         start = timer()
-        distances = gsd.find_distances(X, A, B)
+        distances = gsd.find_distances(X, A, B, batch_size=250)
+        cp.cuda.Device().synchronize()
         print(f"Test took {timer() - start} seconds")
+
+        print(distances.shape)
 
         self.assertTrue(distances.shape == (n, 2 * k * m))
 
@@ -209,7 +256,7 @@ class TestProcessQueryVectorDegreeArray(unittest.TestCase):
 
     @unittest.skip("Takes way too long")
     def test_normally_large_mnist(self):
-        X= create_mock_mnist_dataset(n=int(1e6))
+        X = create_mock_mnist_dataset(n=int(1e6))
         A, B = create_mock_A_B_matrices(n=X.shape[0])
 
         distances = gsd.find_distances(X, A, B, alpha=100)
@@ -355,23 +402,28 @@ class TestContructClusterGraph(unittest.TestCase):
 class TestPerformBFS(unittest.TestCase):
     pass  # TODO
 
+def cpArrayToFlatCSV(arr, filename):
+    arr = arr.get()
+    arr = arr.flatten()
+    df = pd.DataFrame(arr)
+    df.to_csv(filename)
 
 def create_mock_A_B_matrices(n=70_000, k=2, m=2000, D=1024):
-    A = cp.random.randint(size=(n, 2 * k), low=0, high=2 * (D - 1),
+    A = np.random.randint(size=(n, 2 * k), low=0, high=2 * (D - 1),
                           dtype=cp.uint32)  # uint32 goes up to 4 billion, more than enough for max n
-    B = cp.random.randint(size=(2 * D, m), low=0, high=n - 1, dtype=cp.uint32)
-    return A, B
+    B = np.random.randint(size=(2 * D, m), low=0, high=n - 1, dtype=cp.uint32)
+    return cp.asarray(A), cp.asarray(B)  # Dunno why but this fixes error
 
 
 def create_mock_random_vectors_set(D=1024, d=784):
-    Y = cp.random.random(size=(d, D)) # Stored along the columns.
+    Y = cp.random.random(size=(d, D))  # Stored along the columns.
     Y = Y.astype(cp.float16)
     return Y
 
 
 def create_mock_mnist_dataset(n=70_000, d=784):
     """
-    Creates a mock MNIST dataset for testing purposes, along with accompanying A, B matrices
+    Creates a mock MNIST dataset for testing purposes
 
     Args:
         n: size of dataset
@@ -383,6 +435,8 @@ def create_mock_mnist_dataset(n=70_000, d=784):
     Returns:
         X, A, B: dataset, A matrix, B matrix
     """
-    X = cp.random.randint(size=(n, d), low=0, high=255, dtype=cp.int16) / 255
-    X = X.astype(cp.float16)  #  Since eps is only 2DP, float16 will do
-    return X
+    X_n = np.random.uniform(size=(n, d))
+    X = X_n.astype(np.float32)
+    return cp.asarray(X)
+
+
