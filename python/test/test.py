@@ -166,8 +166,14 @@ class TestFindDistances(unittest.TestCase):
 
 
     def test_normally_mnist(self):
-        X = create_mock_mnist_dataset()
-        A, B = create_mock_A_B_matrices(n=X.shape[0], k=5, m=50)
+        k = 5
+        n = 70_000
+        m = 50
+        D = 1024
+        d = 784
+
+        X = create_mock_mnist_dataset(n=n, d=d)
+        A, B = create_mock_A_B_matrices(n=X.shape[0], k=k, m=m, D=D)
 
         n = X.shape[0]
         m = B.shape[1]
