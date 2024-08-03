@@ -10,9 +10,7 @@ def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     """
     Main algo for gs-dbscan
 
-    Equiv to algo 1 from paper
-
-    Args:s
+    Args:
         X: point dataset. Stored along the ROWS
         D: number of random vectors to generate for projections
         minPts: Minimum number of points for a point to be clasified as a core point
@@ -117,47 +115,47 @@ def construct_A_B_matrices(X, Y, k, m):
         A tuple of two matrices. The first matrix is the A matrix and the second matrix is the B matrix
     """
 
-    # TODO, do this on the GPU
+    projections = dataset_random_projections(X, Y)
 
-    product = dataset_random_projections(X, Y)
+    return construct_A_B_matrices_from_projections(X.shape[0], Y.shape[1], k, m, projections)
 
-    A = cp.zeros(shape=(len(X), 2 * k))
-    B = cp.zeros(shape=(len(Y), 2 * m))
 
-    for j in range(len(A)):
-        top_k, bottom_k = top_closest_and_furthest_indices(product[j], k)
-        A[j, :k] = 2 * top_k
-        A[j, k:] = 2 * bottom_k + 1
+def construct_A_B_matrices_from_projections(n, D, k, m, projections):
+    # Helper method for the above, extracted for testing purposes
+    A = cp.zeros(shape=(n, 2 * k))
+    B = cp.zeros(shape=(2 * D, m))
 
-    for j in range(len(B)):
-        top_m, bottom_m = top_closest_and_furthest_indices(product[:, j], m)
-        B[2 * j, :m] = top_m
-        B[2 * j + 1, m:] = bottom_m
+    for i in range(n):
+        top_k, bottom_k = top_closest_and_furthest_indices(projections[i, :], k)
+        A[i, :k] = 2 * top_k
+        A[i, k:] = 2 * bottom_k + 1
+
+    for j in range(D):
+        top_m, bottom_m = top_closest_and_furthest_indices(projections[:, j], m)
+        B[2 * j, :] = top_m
+        B[2 * j + 1, :] = bottom_m
 
     return A, B
 
 
 def construct_A_B_matrices_gpu_partition(X, Y, k, m):
-    product = dataset_random_projections(X, Y)
+    projections = dataset_random_projections(X, Y)
 
-    A = cp.empty(shape=(len(X), 2 * k), dtype=cp.int32)
+    return construct_A_B_matrices_gpu_partition_from_projections(X.shape[0], Y.shape[0], k, m, projections)
 
-    A[:, :k] = 2 * cp.argpartition(product, k, axis=1)[:, :k]
-    A[:, k:] = 2 * cp.argpartition(product, -k, axis=1)[:, -k:] + 1
 
-    D = Y.shape[1]
+def construct_A_B_matrices_gpu_partition_from_projections(n, D, k, m, projections):
+    A = cp.empty(shape=(n, 2 * k), dtype=cp.int32)
+    A[:, :k] = 2 * cp.argpartition(projections, k, axis=1)[:, :k]
+    A[:, k:] = 2 * cp.argpartition(projections, -k, axis=1)[:, -k:] + 1
     B = cp.empty(shape=(2 * D, m), dtype=cp.int32)
-
     b_even_idx = cp.arange(0, 2 * D, 2)
     B_odd_idx = b_even_idx + 1
-
     # Can make this faster, don't use an Odd/Even index, and just set the first Y rows to the top m and the next Y rows to the bottom m (for each random vector)
     # Going to keep it like this for a proof of concept, and to get a rough idea of runtime
     # For note above, found that thru testing creating the indices array has a negligible impact on runtime, thus not worth doing the above option
-
-    B[b_even_idx, :] = cp.argpartition(product, m, axis=0)[:m, :].T
-    B[B_odd_idx, :] = cp.argpartition(product, -m, axis=0)[-m:, :].T
-
+    B[b_even_idx, :] = cp.argpartition(projections, m, axis=0)[:m, :].T
+    B[B_odd_idx, :] = cp.argpartition(projections, -m, axis=0)[-m:, :].T
     return A, B
 
 
@@ -178,30 +176,29 @@ def construct_A_B_matrices_gpu_sort(X, Y, k, m):
     Returns:
         A tuple of two matrices. The first matrix is the A matrix and the second matrix is the B matrix
     """
-    product = dataset_random_projections(X, Y)
+    projections = dataset_random_projections(X, Y)
 
-    data_to_random_idx_sorted = cp.argsort(product, axis=1)
-    random_to_data_idx_sorted = cp.argsort(product, axis=0)
+    return construct_A_B_matrices_gpu_sort_from_projections(X.shape[0], Y.shape[1], k, m, projections)
 
-    A = cp.empty(shape=(len(X), 2 * k), dtype=cp.uint16)  # As long as D < 65536, this is fine
+def construct_A_B_matrices_gpu_sort_from_projections(n, D, k, m, projections):
+    data_to_random_idx_sorted = cp.argsort(projections, axis=1)
+    random_to_data_idx_sorted = cp.argsort(projections, axis=0)
+    A = cp.empty(shape=(n, 2 * k), dtype=cp.uint16)  # As long as D < 65536, this is fine
     A[:, :k] = 2 * data_to_random_idx_sorted[:, :k]
     A[:, k:] = 2 * data_to_random_idx_sorted[:, -k:] + 1
-
-    D = Y.shape[1]
     B = cp.empty(shape=(2 * D, m), dtype=cp.uint16)
-
     b_even_idx = cp.arange(0, 2 * D, 2)
     B_odd_idx = b_even_idx + 1
-
     B[b_even_idx, :] = random_to_data_idx_sorted[:m, :].T
     B[B_odd_idx, :] = random_to_data_idx_sorted[-m:, :].T
-
     return A, B
 
 
 def top_closest_and_furthest_indices(vector, n):
     """
-    Finds the indices of the top k largest and smallest entries from a vector
+    Finds the indices of the top k largest and smallest indices of the entries of a vector
+
+    Assumes entries of vector are between 0 and 1
 
     Args:
         vector: the vector as mentioned above
@@ -211,11 +208,11 @@ def top_closest_and_furthest_indices(vector, n):
         A tuple of two cp arrays. The first array is the top k closest indices and the second array is the top m furthest indices
     """
     top_heap = LimitedPriorityQueue(n)
-    bottom_heap = LimitedPriorityQueue(n, reverse=True)
+    bottom_heap = LimitedPriorityQueue(n)
     for i in range(len(vector)):
         entry = vector[i]
         top_heap.push(i, entry)
-        bottom_heap.push(i, entry)
+        bottom_heap.push(i, 1-entry)
     return cp.array(top_heap.heap_items()), cp.array(bottom_heap.heap_items())
 
 
@@ -254,7 +251,7 @@ def random_vecs(num, dim):
 
 ### Calculating distances between query and candidate vectors ###
 
-def find_distances(X, A, B, alpha=1.2):
+def find_distances(X, A, B, alpha=1.2, batch_size = -1):
     """
     Finds the distances between each query vector and their candidate vectors
 
@@ -275,25 +272,22 @@ def find_distances(X, A, B, alpha=1.2):
 
     n = X.shape[0]
     d = X.shape[1]
+    D = B.shape[0] // 2
 
-    batch_size = get_batch_size(n, X.shape[1], k, m, alpha=alpha)
+    batch_size = batch_size if batch_size != -1 else get_batch_size(n, d, k, m, alpha=alpha)
 
     distances = cp.empty(shape=(n, 2 * k * m),
                          dtype=cp.float16)  # float32 causes a memory overload. float16 is fine (for eps 2DP)
-    # Z_batch = cp.empty(shape=(batch_size, 2*k, m, d), dtype=cp.float16)
-    # Z_batch_adj = cp.empty(shape=(batch_size, 2*k*m, d), dtype=cp.float16)
-    # Y_batch = cp.empty(shape=Z_batch_adj.shape, dtype=cp.float16)
 
     for i in range(0, n, batch_size):
         max_batch_idx = min(i + batch_size, X.shape[0])
 
         Z_batch = X[B[A[i:max_batch_idx]]]
-        Z_batch_adj = Z_batch.reshape(Z_batch.shape[0], Z_batch.shape[1] * Z_batch.shape[2], Z_batch.shape[3])
+        Z_batch_adj = Z_batch.reshape(batch_size, 2 * k * m,  d)
 
         Y_batch = Z_batch_adj - X[i:max_batch_idx, cp.newaxis, :]
 
-        distances[i:max_batch_idx] = cp.linalg.norm(Y_batch,
-                                                    axis=2)  # using linalg.norm faster than cp.sum(Y**2, axis=2)
+        distances[i:max_batch_idx] = cp.linalg.norm(Y_batch, axis=2)
 
     return distances
 
@@ -315,8 +309,8 @@ def get_batch_size(n, d, k, m, alpha=1.2):
     # For some reason, no matter what batch size you choose, after 200 iterations
     # Of the above forloop, the performance falls of a cliff # Can be adjusted to make the batch size smaller or larger
 
-    batch_size = int((n * d * 2 * k * m) // (
-                1024 ** 3) // alpha)  # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
+    batch_size = int((n * d * 2 * k * m) // ((
+                1024 ** 3) * alpha))  # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
 
     if batch_size == 0:
         return n
