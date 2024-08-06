@@ -1,10 +1,23 @@
-\begin{thebibliography}{1}
+\begin{thebibliography}{10}
+
+\bibitem{andrade_g-dbscan_2013}
+Guilherme Andrade, Gabriel Ramos, Daniel Madeira, Rafael Oliveira, Renato
+  Ferreira, and Leonardo Rocha.
+\newblock G-{DBSCAN}: A {GPU} accelerated algorithm for density-based
+  clustering.
+\newblock 18:369--378.
 
 \bibitem{DBSCAN}
 Ricardo Campello, Peer Kröger, Joerg Sander, and Arthur Zimek.
 \newblock Density‐based clustering.
 \newblock {\em Wiley Interdisciplinary Reviews: Data Mining and Knowledge
   Discovery}, 10, 10 2019.
+
+\bibitem{campello_density-based_2020}
+Ricardo J. G.~B. Campello, Peer Kröger, Jörg Sander, and Arthur Zimek.
+\newblock Density‐based clustering.
+\newblock {\em Wiley Interdisciplinary Reviews. Data Mining and Knowledge
+  Discovery}, 10(2), 2020.
 
 \bibitem{DB_SCAN_1996}
 Martin Ester, Hans-Peter Kriegel, J\"{o}rg Sander, and Xiaowei Xu.
@@ -14,10 +27,28 @@ Martin Ester, Hans-Peter Kriegel, J\"{o}rg Sander, and Xiaowei Xu.
   Knowledge Discovery and Data Mining}, KDD'96, page 226–231. AAAI Press,
   1996.
 
+\bibitem{gholizadeh_k-dbscan_2021}
+Nahid Gholizadeh, Hamid Saadatfar, and Nooshin Hanafi.
+\newblock K-{DBSCAN}: An improved {DBSCAN} algorithm for big data.
+\newblock 77:1--22.
+
+\bibitem{huang_grit-dbscan_2022}
+Xiaogang Huang, Tiefeng Ma, Conan Liu, and Shuangzhe Liu.
+\newblock {GriT}-{DBSCAN}: A spatial clustering algorithm for very large
+  databases.
+\newblock \_eprint: 2210.07580.
+
 \bibitem{jiang_faster_2020}
 Heinrich Jiang, Jennifer Jang, and Jakub Łącki.
 \newblock Faster {DBSCAN} via subsampled similarity queries.
 \newblock \_eprint: 2006.06743.
+
+\bibitem{mustafa_experimental_2019}
+Hamza Mustafa, Eleazar Leal, and Le~Gruenwald.
+\newblock An experimental comparison of {GPU} techniques for {DBSCAN}
+  clustering.
+\newblock In {\em 2019 {IEEE} International Conference on Big Data (Big Data)},
+  pages 3701--3710.
 
 \bibitem{nvidia_cuda}
 NVIDIA.
@@ -34,11 +65,25 @@ John~D. Owens, Mike Houston, David Luebke, Simon Green, John~E. Stone, and
 \newblock Gpu computing.
 \newblock {\em Proceedings of the IEEE}, 96(5):879--899, 2008.
 
+\bibitem{poudel_cuda-dclust_2021}
+Madhav Poudel and Michael Gowanlock.
+\newblock {CUDA}-{DClust}+: Revisiting early {GPU}-accelerated {DBSCAN}
+  clustering designs.
+\newblock In {\em 2021 {IEEE} 28th International Conference on High Performance
+  Computing, Data, and Analytics ({HiPC})}, pages 354--363.
+
 \bibitem{schneider_scalable_2017}
 Johannes Schneider and Michalis Vlachos.
 \newblock Scalable density-based clustering with quality guarantees using
   random projections.
 \newblock 31.
+
+\bibitem{thapa_memory-efficient_2010}
+Rajeev~J. Thapa, Christian Trefftz, and Greg Wolffe.
+\newblock Memory-efficient implementation of a graphics processor-based cluster
+  detection algorithm for large spatial databases.
+\newblock In {\em 2010 {IEEE} International Conference on Electro/Information
+  Technology}, pages 1--5.
 
 \bibitem{S_DBSCAN}
 Haochuan Xu and Ninh Pham.

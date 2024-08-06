@@ -9,63 +9,79 @@
 \citation{poudel_cuda-dclust_2021}
 \citation{andrade_g-dbscan_2013}
 \citation{mustafa_experimental_2019}
-\citation{DBSCAN}
-\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{1}{}\protected@file@percent }
 \@writefile{tdo}{\contentsline {todo}{why are these refs not showing up?}{1}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid1}{11462081}{25708260}
+\pgfsyspdfmark {pgfid1}{20112834}{24184232}
 \@writefile{tdo}{\contentsline {todo}{reference for this}{1}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid2}{11462081}{23570158}
+\pgfsyspdfmark {pgfid2}{20112834}{22117574}
 \@writefile{tdo}{\contentsline {todo}{feel like more can be said here}{1}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid3}{11462081}{15155673}
+\pgfsyspdfmark {pgfid3}{20112834}{16968904}
 \@writefile{tdo}{\contentsline {todo}{honestly, not too sure about this! - its a claim made in CUDA-DClust+ paper - end of p40}{1}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid4}{11462081}{3973604}
-\@writefile{toc}{\contentsline {section}{\numberline {III}Preliminaries}{1}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}DBSCAN}{1}{}\protected@file@percent }
+\pgfsyspdfmark {pgfid4}{20112834}{10183654}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Preliminaries}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}DBSCAN}{1}{}\protected@file@percent }
 \@writefile{tdo}{\contentsline {todo}{Perhaps comment that the below is a naive implementation of DBSCAN?}{1}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid5}{28763585}{37133189}
-\@writefile{tdo}{\contentsline {todo}{This is a little premature to mention 'core points' when they haven't even been defined yet}{1}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid6}{28763585}{31952090}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces DBSCAN, classification of core points}}{1}{}\protected@file@percent }
-\newlabel{alg:dbscan-core-points}{{1}{1}{}{}{}}
+\citation{DBSCAN}
 \citation{S_DBSCAN}
-\citation{Owens2008}
-\citation{nvidia_cuda}
+\pgfsyspdfmark {pgfid5}{20112834}{46829477}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces DBSCAN, classification of core points}}{2}{}\protected@file@percent }
+\newlabel{alg:dbscan-core-points}{{1}{2}{}{}{}}
 \@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces DBSCAN, forming clusters}}{2}{}\protected@file@percent }
 \newlabel{alg:dbscan}{{2}{2}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}sDBSCAN}{2}{}\protected@file@percent }
-\@writefile{tdo}{\contentsline {todo}{Comment here about the scalability of DBSCAN, and how this is addressed with sDBSCAN.}{2}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid7}{11462081}{32541994}
-\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Definitions and descriptions of sDBSCAN's parameters}}{2}{}\protected@file@percent }
-\newlabel{tab:definitions}{{I}{2}{}{}{}}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {3}{\ignorespaces Preprocessing}}{2}{}\protected@file@percent }
-\newlabel{alg:preprocessing}{{3}{2}{}{}{}}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {4}{\ignorespaces Finding core points and their neighborhoods}}{2}{}\protected@file@percent }
-\newlabel{alg:neighborhood}{{4}{2}{}{}{}}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {5}{\ignorespaces sDBSCAN}}{2}{}\protected@file@percent }
-\newlabel{alg:sdbscan}{{5}{2}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}GPU Programming with CUDA}{2}{}\protected@file@percent }
-\@writefile{tdo}{\contentsline {todo}{This sentence could be reworded}{2}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid8}{28763585}{5137433}
+\citation{DBSCAN_REVISITED}
+\citation{S_DBSCAN}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Classification of Core Points \cite  {S_DBSCAN}}}{3}{}\protected@file@percent }
+\newlabel{fig:core-points}{{1}{3}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces The formation of clusters from DBSCAN \cite  {DBSCAN_REVISITED}}}{3}{}\protected@file@percent }
+\newlabel{fig:clusters}{{2}{3}{}{}{}}
+\@writefile{tdo}{\contentsline {todo}{Add a comment on different distance metrics that can be used}{3}{}\protected@file@percent }
+\pgfsyspdfmark {pgfid6}{4736286}{17481078}
+\pgfsyspdfmark {pgfid9}{38356583}{17493366}
+\pgfsyspdfmark {pgfid10}{40470119}{17269452}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}sDBSCAN}{3}{}\protected@file@percent }
+\@writefile{tdo}{\contentsline {todo}{Comment here about the scalability of DBSCAN, and how this is addressed with sDBSCAN.}{3}{}\protected@file@percent }
+\pgfsyspdfmark {pgfid11}{20112834}{13626292}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Definitions and descriptions of sDBSCAN's parameters}}{4}{}\protected@file@percent }
+\newlabel{tab:definitions}{{1}{4}{}{}{}}
+\@writefile{tdo}{\contentsline {todo}{Perhaps some more extrapolation on the usage of the random points, before going straight into the business of projections}{4}{}\protected@file@percent }
+\pgfsyspdfmark {pgfid12}{20112834}{37071897}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {3}{\ignorespaces Preprocessing}}{4}{}\protected@file@percent }
+\newlabel{alg:preprocessing}{{3}{4}{}{}{}}
+\citation{Owens2008}
+\citation{nvidia_cuda}
 \citation{CUDARefresher2023}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {4}{\ignorespaces Finding core points and their neighborhoods}}{5}{}\protected@file@percent }
+\newlabel{alg:neighborhood}{{4}{5}{}{}{}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {5}{\ignorespaces sDBSCAN}}{5}{}\protected@file@percent }
+\newlabel{alg:sdbscan}{{5}{5}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}GPU Programming with CUDA}{5}{}\protected@file@percent }
+\@writefile{tdo}{\contentsline {todo}{This sentence could be reworded}{5}{}\protected@file@percent }
+\pgfsyspdfmark {pgfid13}{20112834}{13500358}
+\@writefile{tdo}{\contentsline {todo}{can it be called a model?}{5}{}\protected@file@percent }
+\pgfsyspdfmark {pgfid14}{20112834}{9138120}
 \bibstyle{plain}
 \bibdata{refs,refs-related}
-\bibcite{DBSCAN}{1}
-\bibcite{DB_SCAN_1996}{2}
-\bibcite{jiang_faster_2020}{3}
-\bibcite{nvidia_cuda}{4}
-\bibcite{CUDARefresher2023}{5}
-\bibcite{Owens2008}{6}
-\bibcite{schneider_scalable_2017}{7}
-\bibcite{S_DBSCAN}{8}
-\@writefile{tdo}{\contentsline {todo}{can it be called a model?}{3}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid9}{11462081}{45586685}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Simplified overview of the CUDA programming model \cite  {CUDARefresher2023}}}{3}{}\protected@file@percent }
-\newlabel{fig:nvidia-cuda-model}{{1}{3}{}{}{}}
-\@writefile{tdo}{\contentsline {todo}{find a reference for this}{3}{}\protected@file@percent }
-\pgfsyspdfmark {pgfid10}{11462081}{24782976}
-\@writefile{toc}{\contentsline {section}{\numberline {IV}CUDA-sDBSCAN}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {V}Experiment}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {VI}Conclusion}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{References}{3}{}\protected@file@percent }
-\gdef \@abspage@last{3}
+\bibcite{andrade_g-dbscan_2013}{1}
+\bibcite{DBSCAN}{2}
+\bibcite{campello_density-based_2020}{3}
+\bibcite{DB_SCAN_1996}{4}
+\bibcite{gholizadeh_k-dbscan_2021}{5}
+\bibcite{huang_grit-dbscan_2022}{6}
+\bibcite{jiang_faster_2020}{7}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Simplified overview of the CUDA programming model \cite  {CUDARefresher2023}}}{6}{}\protected@file@percent }
+\newlabel{fig:nvidia-cuda-model}{{3}{6}{}{}{}}
+\@writefile{tdo}{\contentsline {todo}{find a reference for this}{6}{}\protected@file@percent }
+\pgfsyspdfmark {pgfid15}{20112834}{27145590}
+\@writefile{toc}{\contentsline {section}{\numberline {4}CUDA-sDBSCAN}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Experiment}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{6}{}\protected@file@percent }
+\bibcite{mustafa_experimental_2019}{8}
+\bibcite{nvidia_cuda}{9}
+\bibcite{CUDARefresher2023}{10}
+\bibcite{Owens2008}{11}
+\bibcite{poudel_cuda-dclust_2021}{12}
+\bibcite{schneider_scalable_2017}{13}
+\bibcite{thapa_memory-efficient_2010}{14}
+\bibcite{S_DBSCAN}{15}
+\gdef \@abspage@last{7}
