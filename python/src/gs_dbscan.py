@@ -1,18 +1,16 @@
 from numba import cuda
 import numpy as np
 from src.limited_priority_queue import LimitedPriorityQueue
-import ThrustRTC as trtc
 import cupy as cp
 import networkx as nx
 from timeit import default_timer as timer
+
 
 def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     """
     Main algo for gs-dbscan
 
-    Equiv to algo 1 from paper
-
-    Args:s
+    Args:
         X: point dataset. Stored along the ROWS
         D: number of random vectors to generate for projections
         minPts: Minimum number of points for a point to be clasified as a core point
@@ -22,7 +20,7 @@ def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     """
     if not skip_pre_checks:
         prechecks(X, D, minPts, k, m, eps)
-    
+
     A, B = preprocessing(X, D)
 
     distances = find_distances(X, A, B)
@@ -32,6 +30,7 @@ def gs_dbscan(X, D, minPts, k, m, eps, skip_pre_checks=False):
     connected_components = perform_BFS(graph_adjacency_list)
 
     return connected_components
+
 
 def prechecks(X, D, minPts, k, m, eps):
     """
@@ -50,6 +49,7 @@ def prechecks(X, D, minPts, k, m, eps):
     assert D > 0, "Number of random vectors must be greater than 0"
     assert D >= k, "Number of random vectors must be greater than or equal to k"
 
+
 def preprocessing(X, D, k, m):
     """
     Pre-processing steps for GS-DBSCAN
@@ -63,6 +63,7 @@ def preprocessing(X, D, k, m):
     """
     Y = create_random_vec_mat(D, X.shape[1])
     return construct_A_B_matrices(X, D, k, m)
+
 
 ### Calculating the random projections of the dataset ###
 
@@ -83,6 +84,7 @@ def create_random_vec_mat(D, d):
     """
     return np.random.normal(size=(d, D))
 
+
 def random_projections(X):
     """
     Uses FHT to compute the random projections of the dataset
@@ -93,6 +95,7 @@ def random_projections(X):
 
     # TODO Implement me!
     pass
+
 
 def construct_A_B_matrices(X, Y, k, m):
     """
@@ -112,43 +115,106 @@ def construct_A_B_matrices(X, Y, k, m):
         A tuple of two matrices. The first matrix is the A matrix and the second matrix is the B matrix
     """
 
-    # TODO, do this on the GPU
-    
-    product = dataset_random_projections(X, Y)
+    projections = dataset_random_projections(X, Y)
 
-    A = np.zeros(size=(len(X), 2*k))
-    B = np.zeros(size=(len(Y), 2*m))
+    return construct_A_B_matrices_from_projections(X.shape[0], Y.shape[1], k, m, projections)
 
-    for j in range(len(A)):
-        top_k, bottom_k = top_closest_and_furthest_indices(product[j], k)
-        A[j, :k] = 2*top_k
-        A[j, k:] = 2*bottom_k + 1
 
-    for j in range(len(B)):
-        top_m, bottom_m = top_closest_and_furthest_indices(product[:, j], m)
-        B[2*j, :m] = top_m
-        B[2*j+1, m:] = bottom_m
+def construct_A_B_matrices_from_projections(n, D, k, m, projections):
+    # Helper method for the above, extracted for testing purposes
+    A = cp.zeros(shape=(n, 2 * k))
+    B = cp.zeros(shape=(2 * D, m))
+
+    for i in range(n):
+        top_k, bottom_k = top_closest_and_furthest_indices(projections[i, :], k)
+        A[i, :k] = 2 * top_k
+        A[i, k:] = 2 * bottom_k + 1
+
+    for j in range(D):
+        top_m, bottom_m = top_closest_and_furthest_indices(projections[:, j], m)
+        B[2 * j, :] = top_m
+        B[2 * j + 1, :] = bottom_m
 
     return A, B
 
+
+def construct_A_B_matrices_gpu_partition(X, Y, k, m):
+    projections = dataset_random_projections(X, Y)
+
+    return construct_A_B_matrices_gpu_partition_from_projections(X.shape[0], Y.shape[0], k, m, projections)
+
+
+def construct_A_B_matrices_gpu_partition_from_projections(n, D, k, m, projections):
+    A = cp.empty(shape=(n, 2 * k), dtype=cp.int32)
+    A[:, :k] = 2 * cp.argpartition(projections, k, axis=1)[:, :k]
+    A[:, k:] = 2 * cp.argpartition(projections, -k, axis=1)[:, -k:] + 1
+    B = cp.empty(shape=(2 * D, m), dtype=cp.int32)
+    b_even_idx = cp.arange(0, 2 * D, 2)
+    B_odd_idx = b_even_idx + 1
+    # Can make this faster, don't use an Odd/Even index, and just set the first Y rows to the top m and the next Y rows to the bottom m (for each random vector)
+    # Going to keep it like this for a proof of concept, and to get a rough idea of runtime
+    # For note above, found that thru testing creating the indices array has a negligible impact on runtime, thus not worth doing the above option
+    B[b_even_idx, :] = cp.argpartition(projections, m, axis=0)[:m, :].T
+    B[B_odd_idx, :] = cp.argpartition(projections, -m, axis=0)[-m:, :].T
+    return A, B
+
+
+def construct_A_B_matrices_gpu_sort(X, Y, k, m):
+    """
+    Construct A, B matrices using a GPU
+
+    Does this naively using sorting - not with a priority queue
+
+    Basically done as a proof of concept for the CPP implementation
+
+    Args:
+        X: point dataset, a matrix of points stored along the ROWS
+        Y: random vectors, a matrix of random vectors stored along the COLS
+        k: k param k parameter as described above
+        m: m param m parameter as described above
+
+    Returns:
+        A tuple of two matrices. The first matrix is the A matrix and the second matrix is the B matrix
+    """
+    projections = dataset_random_projections(X, Y)
+
+    return construct_A_B_matrices_gpu_sort_from_projections(X.shape[0], Y.shape[1], k, m, projections)
+
+def construct_A_B_matrices_gpu_sort_from_projections(n, D, k, m, projections):
+    data_to_random_idx_sorted = cp.argsort(projections, axis=1)
+    random_to_data_idx_sorted = cp.argsort(projections, axis=0)
+    A = cp.empty(shape=(n, 2 * k), dtype=cp.uint16)  # As long as D < 65536, this is fine
+    A[:, :k] = 2 * data_to_random_idx_sorted[:, :k]
+    A[:, k:] = 2 * data_to_random_idx_sorted[:, -k:] + 1
+    B = cp.empty(shape=(2 * D, m), dtype=cp.uint16)
+    b_even_idx = cp.arange(0, 2 * D, 2)
+    B_odd_idx = b_even_idx + 1
+    B[b_even_idx, :] = random_to_data_idx_sorted[:m, :].T
+    B[B_odd_idx, :] = random_to_data_idx_sorted[-m:, :].T
+    return A, B
+
+
 def top_closest_and_furthest_indices(vector, n):
     """
-    Finds the indices of the top k largest and smallest entries from a vector
+    Finds the indices of the top k largest and smallest indices of the entries of a vector
+
+    Assumes entries of vector are between 0 and 1
 
     Args:
         vector: the vector as mentioned above
         k: k as mentioned   
 
     Returns:
-        A tuple of two np arrays. The first array is the top k closest indices and the second array is the top m furthest indices
+        A tuple of two cp arrays. The first array is the top k closest indices and the second array is the top m furthest indices
     """
     top_heap = LimitedPriorityQueue(n)
-    bottom_heap = LimitedPriorityQueue(n, reverse=True)
+    bottom_heap = LimitedPriorityQueue(n)
     for i in range(len(vector)):
         entry = vector[i]
         top_heap.push(i, entry)
-        bottom_heap.push(i, entry)
-    return np.array(top_heap.heap_items()), np.array(bottom_heap.heap_items())
+        bottom_heap.push(i, 1-entry)
+    return cp.array(top_heap.heap_items()), cp.array(bottom_heap.heap_items())
+
 
 def dataset_random_projections(X, Y):
     """
@@ -163,7 +229,8 @@ def dataset_random_projections(X, Y):
     Returns:
         A matrix of the random projections of the dataset onto the random vectors. An entry (i, j) is the inner product of the ith dataset vector with the jth random vector
     """
-    return np.dot(X, Y)
+    return cp.dot(X, Y)
+
 
 def random_vecs(num, dim):
     """
@@ -181,9 +248,10 @@ def random_vecs(num, dim):
     """
     return np.random.normal(size=(num, dim))
 
+
 ### Calculating distances between query and candidate vectors ###
 
-def find_distances(X, A, B, alpha=1.2):
+def find_distances(X, A, B, alpha=1.2, batch_size = -1):
     """
     Finds the distances between each query vector and their candidate vectors
 
@@ -199,34 +267,32 @@ def find_distances(X, A, B, alpha=1.2):
     Returns:
         A matrix of distances between the query and candidate vectors. Has shape (len(X), 2*k*m)
     """
-    start = timer()
-
     k = A.shape[1] // 2
     m = B.shape[1]
 
     n = X.shape[0]
     d = X.shape[1]
+    D = B.shape[0] // 2
 
-    batch_size = get_batch_size(n, X.shape[1], k, m, alpha=alpha)
+    batch_size = batch_size if batch_size != -1 else get_batch_size(n, d, k, m, alpha=alpha)
 
-    distances = cp.empty(shape=(n, 2*k*m), dtype=cp.float16) # float32 causes a memory overload. float16 is fine (for eps 2DP)
-    # Z_batch = cp.empty(shape=(batch_size, 2*k, m, d), dtype=cp.float16)
-    # Z_batch_adj = cp.empty(shape=(batch_size, 2*k*m, d), dtype=cp.float16)
-    # Y_batch = cp.empty(shape=Z_batch_adj.shape, dtype=cp.float16)
+    distances = cp.empty(shape=(n, 2 * k * m),
+                         dtype=cp.float16)  # float32 causes a memory overload. float16 is fine (for eps 2DP)
 
     for i in range(0, n, batch_size):
-        max_batch_idx = min(i+batch_size, X.shape[0])
+        max_batch_idx = min(i + batch_size, X.shape[0])
 
         Z_batch = X[B[A[i:max_batch_idx]]]
-        Z_batch_adj = Z_batch.reshape(Z_batch.shape[0], Z_batch.shape[1] * Z_batch.shape[2], Z_batch.shape[3])
+        Z_batch_adj = Z_batch.reshape(batch_size, 2 * k * m,  d)
 
         Y_batch = Z_batch_adj - X[i:max_batch_idx, cp.newaxis, :]
 
-        distances[i:max_batch_idx] = cp.linalg.norm(Y_batch, axis=2) # using linalg.norm faster than cp.sum(Y**2, axis=2)
-    
+        distances[i:max_batch_idx] = cp.linalg.norm(Y_batch, axis=2)
+
     return distances
 
-def get_batch_size(n, d, k, m, alpha = 1.2):
+
+def get_batch_size(n, d, k, m, alpha=1.2):
     """
     Calculates the batch size. 
 
@@ -243,7 +309,8 @@ def get_batch_size(n, d, k, m, alpha = 1.2):
     # For some reason, no matter what batch size you choose, after 200 iterations
     # Of the above forloop, the performance falls of a cliff # Can be adjusted to make the batch size smaller or larger
 
-    batch_size = int((n*d*2*k*m) // (1024**3) // alpha) # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
+    batch_size = int((n * d * 2 * k * m) // ((
+                1024 ** 3) * alpha))  # Make batch size such that the total memory used is less than 1GB. 32 here is for float32. 1024**3 is 1GB
 
     if batch_size == 0:
         return n
@@ -276,11 +343,12 @@ def construct_cluster_graph(distances, eps, k, m):
 
     E = construct_query_vector_degree_array(distances, eps)
 
-    V = process_query_vector_degree_array(E) 
+    V = process_query_vector_degree_array(E)
 
     adjacency_list = assemble_adjacency_list(distances, E, V, eps)
 
     return adjacency_list, V
+
 
 def construct_query_vector_degree_array(distances, eps):
     """
@@ -297,7 +365,8 @@ def construct_query_vector_degree_array(distances, eps):
     """
     assert distances.dtype == eps.dtype, "Distances and eps should have the same datatype"
     return cp.sum(distances < eps[0], axis=1)
-    
+
+
 def process_query_vector_degree_array(E):
     """
     Processes the query vector degree array into a form that can be used to create the cluster graph
@@ -314,12 +383,14 @@ def process_query_vector_degree_array(E):
     Returns:
         The processed E array. As a cupy array
     """
-    return cp.cumsum(E) - E # Effectively does an exclusive scan, very fast anwyays, probably not worth the effort to use ThrustRTC
+    return cp.cumsum(
+        E) - E  # Effectively does an exclusive scan, very fast anwyays, probably not worth the effort to use ThrustRTC
 
-    #E_d = trtc.DVCupyVector(E)
-    #V_d = trtc.DVCupyVector(cp.zeros(len(E), dtype=cp.int32))
-    #trtc.Exclusive_Scan(E_d, V_d)
-    #return cp.array(V_d.to_host())
+    # E_d = trtc.DVCupyVector(E)
+    # V_d = trtc.DVCupyVector(cp.zeros(len(E), dtype=cp.int32))
+    # trtc.Exclusive_Scan(E_d, V_d)
+    # return cp.array(V_d.to_host())
+
 
 def assemble_adjacency_list(distances, E, A, B, V, eps, block_size=1024):
     """
@@ -355,11 +426,12 @@ def assemble_adjacency_list(distances, E, A, B, V, eps, block_size=1024):
     block_size = min(block_size, len(E))
 
     # TODO set eps as same dtype as distances for better runtime
-    construct_adjacency_list_for_query_vector[num_blocks, block_size](distances_d, adjacency_list_d, V_d, A_d, B_d, eps_d)
+    construct_adjacency_list_for_query_vector[num_blocks, block_size](distances_d, adjacency_list_d, V_d, A_d, B_d,
+                                                                      eps_d)
     cuda.synchronize()
 
     return adjacency_list_d.copy_to_host()
-    
+
 
 @cuda.jit
 def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d, A_d, B_d, eps):
@@ -389,7 +461,6 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
     # TODO can make this more efficient if E[i] == 0 then this loop can be skipped altogether
     # Can also have a break condition if you have already added E[i] neighbourhood vectors
 
-
     for j in range(distances_d.shape[1]):
         if distances_d[i][j] < eps[0]:
             A_col = j // m
@@ -397,8 +468,9 @@ def construct_adjacency_list_for_query_vector(distances_d, adjacency_list_d, V_d
             B_row = A_d[i][A_col]
             neighbourhood_vector_idx = B_d[B_row][B_col]
 
-            adjacency_list_d[curr_index] = neighbourhood_vector_idx 
+            adjacency_list_d[curr_index] = neighbourhood_vector_idx
             curr_index += 1
+
 
 ### Performing BFS to find connected components ###
 
@@ -420,22 +492,8 @@ def perform_BFS(adjacency_list, V):
     # Done this with a CPU for now. Just as a proof of concept. Will be done on the GPU with C++ in the future
     adjacency_mat = np.zeros(shape=(len(V), len(V)), dtype=bool)
     for i in range(len(V)):
-        for j in range(V[i], V[i+1]):
+        for j in range(V[i], V[i + 1]):
             adjacency_mat[i, adjacency_list[j]] = 1
 
     G = nx.from_numpy_matrix(adjacency_mat)
     return nx.connected_components(G)
-
-
-
-
-
-
-
-
-    
-
-
-
-
-

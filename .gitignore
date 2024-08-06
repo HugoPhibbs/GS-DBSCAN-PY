@@ -1,5 +1,5 @@
 .idea
-gs_venv
+python/gs_venv
 __pycache__
 .vscode
 __ptx_cache__.db
