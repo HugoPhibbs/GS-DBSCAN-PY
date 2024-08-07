@@ -25,7 +25,7 @@
 
 \title{CUDA-sDBSCAN: GPU Accelerated Density Based Clustering With Random Projections}
 \author{   
-    Hugo Phibbs and Ninh Pham % TODO add complete affiliations, emails etc.
+    Hugo Phibbs % TODO add complete affiliations, emails etc.
 }
 \date{March 2024} % TODO change for publication
 
@@ -41,6 +41,9 @@
 \newcommand{\Bqt}{\widetilde{B}_{\eps}(\bq)}
 \newcommand{\Sd} {\mathcal{S}^{d-1}}
 \newcommand{\Nqt}{\widetilde{N}(\bq)}
+\newcommand{\bu}{$\mathbf{u}$}
+\newcommand{\bv}{$\mathbf{v}$}
+\newcommand{\bw}{$\mathbf{w}$}
 
 \begin{document}
 
@@ -53,6 +56,8 @@
 \section{Introduction}	
 DBSCAN \cite{DB_SCAN_1996} is density based clustering based algorithm with many applications in areas such as machine learning, data mining and biology \cite{campello_density-based_2020}. It's applicability has stood the test of time - appearing in a plethora of data analysis tools such as ELKI, scikit-learn, R and Weka.
 
+% TODO can add more here as time progresses.
+
 \section{Related Work}
 
 There have been a myriad of research in the past to adapt DBSCAN for large scale datasets. These attempts can be broadly classified into the usage of data indexing, approximating clusters, specialised hardware and distributed computing.
@@ -62,6 +67,8 @@ Work to scale up DBSCAN with data indexing \cite{ohadi_sw_dbscan_2020, huang_gri
 Research to approximate DBSCAN \cite{S_DBSCAN, schneider_scalable_2017, jiang_faster_2020} has also proved effective at scaling DBSCAN. Sampling approaches such as K-DBSCAN \cite{gholizadeh_k-dbscan_2021} and sngDBSCAN \cite{jiang_faster_2020} \comment{are potentially efficient, except they can rely on the a wise choice of sampling parameters - which can be difficult.}{feel like more can be said here}
 
 Due to the parallelizable nature of DBSCAN, other approaches \cite{andrade_g-dbscan_2013, poudel_cuda-dclust_2021, thapa_memory-efficient_2010} have focused on using a GPU to accelerate DBSCAN. CUDA-DClust+ \cite{poudel_cuda-dclust_2021} utilizes a tree indexing structure as-well as a GPU to accelerate computation. While it is excellent for applications with small scale data-sets, it is limited to this use case due to complexity of creating an indexing tree over large dimensions. Andrade et al's G-DBSCAN \cite{andrade_g-dbscan_2013} focuses on using graph principles along with a GPU to scale DBSCAN. However, due to it's usage of an graph adjacency list, G-DBSCAN can prove to be severely memory intensive \cite{mustafa_experimental_2019}. \comment{There is also little experimental data to support the usage of G-DBSCAN dimensions greater than 2. }{honestly, not too sure about this! - its a claim made in CUDA-DClust+ paper - end of p40}
+
+% TODO add more here, not sure. Just looks a little light right now.
 
 \section{Preliminaries}
 
@@ -252,13 +259,42 @@ From here, the preprocessing steps are essentially used to guide an informed sea
 
 \subsection{GPU Programming with CUDA}
 
-A GPU (Graphical Processing Unit) is based around the idea of having using hundreds to thousands of independent cores to complete tasks in a parallelised manner. This strategy excels in areas such as linear algebra, sorting, and differential equations \cite{Owens2008}. To ease the development of applications that utilize a GPU, NVIDIA, a major manufacturer of GPU chips, has created CUDA \cite{nvidia_cuda} \comment{to provide an API for GPU programming.}{This sentence could be reworded}.
+A GPU (Graphical Processing Unit) is based around the idea of having using hundreds to thousands of independent cores to complete tasks in a parallelised manner. This strategy excels in areas such as linear algebra, sorting, and differential equations \cite{Owens2008}. To ease the development of applications that utilize a GPU, NVIDIA, a major manufacturer of GPU chips, has created the CUDA Platform \cite{nvidia_cuda}.
+For the purposes of this paper, we will look at the typical architecture of a NVIDIA GPU, then see how this relates to the programming model of CUDA.
 
-For the purposes of this paper, we will look at the typical architecture of a NVIDIA GPU, then see how this relates to the programming model of CUDA. 
+% TODO ok to cite IGN?
+A GPU is primarily split in two several \textit{streaming multi-processors} (SMs). An individual SM is composed of a multitude of \textit{streaming processors} (SPs), however, for ease of explanation, we can consider an SP to be \comment{equivalent}{is this erroneous?} in nomenclature to a \textit{CUDA Core}. A typical modern GPU contains 50-100 SMs and thousand of CUDA Cores, for example an RTX 4080 GPU contains 80 SMs and 10240 CUDA Cores \cite{IGN4080SuperReview}. For our purposes, a single CUDA Core can be considered the smallest unit of a GPU - it executes a unit of instruction called a \textit{thread}.
 
-% TODO add note on GPU archicture
+% TODO whats the diff between a streaming processor and a CUDA core?
 
-The CUDA \comment{programming model}{can it be called a model?} abstracts the low levels of programming directly onto a GPU with a few key concepts. At the highest level there is a \textit{kernel grid}, this executes a single set of instructions called a \textit{kernel} across the GPU. A grid is sub components called \textit{thread blocks} these execute a number of individual kernel instructions - called \textit{threads} - across one SM. A single \textit{thread} is executed on one CUDA core - this is the lowest level of programming abstraction with CUDA. Figure \ref{fig:nvidia-cuda-model} explains these concepts.
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.7\linewidth]{gpu-architecture.png}
+	\caption{Simplified overview of typical GPU architecture \cite{GPUOptical}}
+	\label{fig:gpu-architecture}
+\end{figure}
+
+For ease of development, the CUDA Platform abstracts the low level GPU hardware into a programming model with a \comment{few key concepts}{perhaps say why this is necessary}. At the highest level there is a \textit{kernel grid}, this executes a single set of instructions called a \textit{kernel} across a GPU. A
+simple example of a kernel could be a function to add two vectors together. A grid is then sub-composed into \textit{thread blocks}, which in-turn contain \textit{threads}. Multiple thread blocks can be executed on a single SM, but an individual thread block cannot split it's execution across multiple SMs. A single thread executes one instance of a kernel on a CUDA Core. For a graphical representation of these concepts, see figure \ref{fig:nvidia-cuda-model}. Threads are executed in groups called \textit{warps}, which come in sizes of multiple of 32. To maximise occupancy of an SM while a block is being executed, the number of threads per block should be a \comment{multiple of 32}{find a reference for this}.
+
+% TODO, not sure if this example is all that necessary?
+
+As an example of these concepts, take for instance the vector addition problem $\mathbf{u} + \mathbf{v} = \mathbf{w}$ where $dim(\mathbf{u}) = dim(\mathbf{v}) = 1048576$. One could launch a kernel-grid containing $1024$ blocks, with each block containing $1024$ threads. The single thread could be defined to simply perform the operation $\mathbf{u}[i] + \mathbf{v}[i] = \mathbf{w}[i]$ for a given index $i$. A potential kernel to use for this problem is given in pseudo code \ref{alg:vector_addition}. 
+
+\begin{algorithm}[H]
+	\caption{Vector Addition using CUDA}
+	\label{alg:vector_addition}
+	\begin{algorithmic}[1]
+		\State \textbf{Inputs}: Vector $\mathbf{u}$, Vector $\mathbf{v}$, Vector $\mathbf{w}$
+		\State \textbf{Define} Kernel \texttt{vectorAdd}($\mathbf{u}$, $\mathbf{v}$, $\mathbf{w}$):
+		\State \quad Calculate global index $i$ using block and thread indices
+		\State \quad $\mathbf{u}$[i] = $\mathbf{v}$[i] + $\mathbf{w}$[i]
+		\State \textbf{End Kernel}
+	\end{algorithmic}
+\end{algorithm}
+
+
+% Add a comment how this model can be used in a practical example
 
 \begin{figure}[h]
 	\centering
@@ -268,7 +304,8 @@ The CUDA \comment{programming model}{can it be called a model?} abstracts the lo
 \end{figure}
 
 
-Threads are executed in groups called \textit{warps}. To maximise occupancy of an SM while a block is being executed, the size of a block should be a \comment{multiple of 32}{find a reference for this}.
+
+% TODO talk about how one may use a kernel for a simple task - E.g. addition of two vectors.
 
 \section{CUDA-sDBSCAN}
 
